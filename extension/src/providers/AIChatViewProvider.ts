@@ -288,7 +288,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _openFeedback() {
-        const version = '0.4.2';
+        const version = '0.5.0';
         const title = encodeURIComponent('Feedback: ');
         const body = encodeURIComponent(`## Description\n\n\n\n---\n**Environment:**\n- Quest: v${version}\n- VS Code: ${vscode.version}\n- OS: ${process.platform}`);
         const issueUrl = `https://github.com/InbarR/Quest/issues/new?title=${title}&body=${body}`;

@@ -2,13 +2,13 @@
   "name": "quest",
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "publisher": "quest-studio",
   "license": "MIT",
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/inbar-rotem/quest"
+    "url": "https://github.com/InbarR/Quest"
   },
   "engines": {
     "vscode": "^1.85.0"
