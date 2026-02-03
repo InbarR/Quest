@@ -751,7 +751,7 @@
           {
             "id": "runQuery",
             "title": "Run Your Query",
-            "description": "Execute your query and see results instantly.\n\n**Keyboard shortcuts:**\n- **F5** or **Ctrl+Enter** - Run query\n- **Shift+F5** - Cancel query\n\nResults appear in the bottom panel with full export options.\n\n[Run Query](command:queryStudio.runQuery)",
+            "description": "Execute your query and see results instantly.\n\n**Keyboard shortcuts:**\n- **F5** - Run query\n- **Shift+F5** - Cancel query\n\nResults appear in the bottom panel with full export options.\n\n[Run Query](command:queryStudio.runQuery)",
             "media": {
               "markdown": "resources/walkthrough/run-query.md"
             }
