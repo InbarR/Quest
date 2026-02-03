@@ -3,7 +3,7 @@
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
   "version": "0.4.2",
-  "publisher": "inbar-rotem",
+  "publisher": "quest-studio",
   "license": "MIT",
   "icon": "resources/icon.png",
   "repository": {
