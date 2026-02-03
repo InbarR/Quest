@@ -235,13 +235,6 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
             text-overflow: ellipsis;
             font-size: 12px;
             font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .type-icon {
-            font-size: 11px;
-            flex-shrink: 0;
         }
         .item-meta {
             display: flex;
@@ -381,13 +374,9 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
                 const rowBadge = r.success ? '<span class="badge">' + (r.rowCount || 0).toLocaleString() + ' rows</span>' : '<span class="badge error">Error</span>';
                 const queryPreview = escapeHtml((r.query || '').substring(0, 80).replace(/\\n/g, ' '));
 
-                // Type icon based on query source
-                const typeIcon = r.type === 'kusto' ? 'Ⓚ' : r.type === 'ado' ? 'Ⓐ' : r.type === 'outlook' ? '📧' : '📄';
-                const typeName = r.type === 'kusto' ? 'KQL' : r.type === 'ado' ? 'WIQL' : r.type === 'outlook' ? 'OQL' : '';
-
                 return \`<div class="item" data-id="\${r.id}" ondblclick="viewResult('\${r.id}')" oncontextmenu="showContextMenu(event, '\${r.id}')" title="\${escapeHtml(r.query || '')}">
                     <div class="item-content">
-                        <div class="item-title"><span class="type-icon" title="\${typeName}">\${typeIcon}</span> \${escapeHtml(r.title || 'Query')}</div>
+                        <div class="item-title">\${escapeHtml(r.title || 'Query')}</div>
                         <div class="item-meta">
                             <span>\${dateStr} \${timeStr}</span>
                             \${duration ? '<span>' + duration + '</span>' : ''}
