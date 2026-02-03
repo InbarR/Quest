@@ -442,7 +442,7 @@ export function registerQueryCommands(
                 loadingTabId = resultsProvider.showLoading(query, activeClusterUrl, activeDatabase, queryType);
 
                 // Set running context for Stop button visibility
-                await vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', true);
+                vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', true);
 
                 const config = vscode.workspace.getConfiguration('queryStudio');
                 const request: QueryRequest = {
@@ -454,95 +454,108 @@ export function registerQueryCommands(
                     maxResults: config.get('maxResults') || 10000
                 };
 
-                const result = await client.executeQuery(request);
+                // Execute query asynchronously (don't await) to allow concurrent queries
+                const currentTabId = loadingTabId;
+                const currentClusterUrl = activeClusterUrl;
+                const currentDatabase = activeDatabase;
+                const currentQueryType = queryType;
+                const currentQuery = query;
 
-                if (result.success) {
-                    outputChannel.appendLine(`Query completed: ${result.rowCount} rows in ${result.executionTimeMs}ms`);
-
-                    // Generate title for results
-                    let title = 'Query Results';
+                (async () => {
                     try {
-                        title = await client.aiGenerateTitle(query);
-                    } catch {
-                        // Use default title if AI fails
-                    }
+                        const result = await client.executeQuery(request);
 
-                    resultsProvider.showResults(result, title, query, activeClusterUrl, activeDatabase, queryType, loadingTabId);
+                        if (result.success) {
+                            outputChannel.appendLine(`Query completed: ${result.rowCount} rows in ${result.executionTimeMs}ms`);
 
-                    // Auto-save to history
-                    const config = vscode.workspace.getConfiguration('queryStudio');
-                    if (config.get('autoSaveHistory', true)) {
-                        try {
-                            await client.savePreset({
-                                id: Date.now().toString(),
-                                name: title,
-                                query: query,
-                                clusterUrl: activeClusterUrl,
-                                database: activeDatabase,
-                                type: queryType,
-                                createdAt: new Date().toISOString(),
-                                isAutoSaved: true
-                            });
-                            outputChannel.appendLine('Query saved to history');
-                            // Refresh history view
-                            vscode.commands.executeCommand('queryStudio.refreshHistory');
-                        } catch (e) {
-                            outputChannel.appendLine('Failed to save to history');
-                        }
-                    }
-
-                    // Save to results history
-                    if (resultsHistoryProvider) {
-                        try {
-                            const maxSampleRows = config.get<number>('resultsHistory.maxSampleRows', 10);
-                            // Convert sample rows to string[][] to ensure proper serialization
-                            const sampleRows = result.rows.slice(0, maxSampleRows).map(row =>
-                                row.map(cell => cell === null || cell === undefined ? '' : String(cell))
-                            );
-
-                            // Save full results to CSV file
-                            const filePath = saveResultsToCsv(result.columns, result.rows, title);
-                            if (filePath) {
-                                outputChannel.appendLine(`Results saved to: ${filePath}`);
+                            // Generate title for results
+                            let title = 'Query Results';
+                            try {
+                                title = await client.aiGenerateTitle(currentQuery);
+                            } catch {
+                                // Use default title if AI fails
                             }
 
-                            const resultHistoryItem: ResultHistoryItem = {
-                                id: Date.now().toString(),
-                                query: query,
-                                title: title,
-                                clusterUrl: activeClusterUrl,
-                                database: activeDatabase,
-                                rowCount: result.rowCount,
-                                executionTimeMs: result.executionTimeMs,
-                                success: true,
-                                createdAt: new Date().toISOString(),
-                                type: queryType,
-                                columns: result.columns,
-                                sampleRows: sampleRows,
-                                filePath: filePath
-                            };
-                            outputChannel.appendLine(`Saving result to history: ${title}, ${result.rowCount} rows, type=${queryType}`);
-                            await client.saveResultHistory(resultHistoryItem);
-                            outputChannel.appendLine('Result saved to results history successfully');
-                            resultsHistoryProvider.refresh();
-                        } catch (e) {
-                            const errMsg = e instanceof Error ? e.message : String(e);
-                            outputChannel.appendLine(`Failed to save to results history: ${errMsg}`);
+                            resultsProvider.showResults(result, title, currentQuery, currentClusterUrl, currentDatabase, currentQueryType, currentTabId);
+
+                            // Auto-save to history
+                            if (config.get('autoSaveHistory', true)) {
+                                try {
+                                    await client.savePreset({
+                                        id: Date.now().toString(),
+                                        name: title,
+                                        query: currentQuery,
+                                        clusterUrl: currentClusterUrl,
+                                        database: currentDatabase,
+                                        type: currentQueryType,
+                                        createdAt: new Date().toISOString(),
+                                        isAutoSaved: true
+                                    });
+                                    outputChannel.appendLine('Query saved to history');
+                                    vscode.commands.executeCommand('queryStudio.refreshHistory');
+                                } catch (e) {
+                                    outputChannel.appendLine('Failed to save to history');
+                                }
+                            }
+
+                            // Save to results history
+                            if (resultsHistoryProvider) {
+                                try {
+                                    const maxSampleRows = config.get<number>('resultsHistory.maxSampleRows', 10);
+                                    const sampleRows = result.rows.slice(0, maxSampleRows).map(row =>
+                                        row.map(cell => cell === null || cell === undefined ? '' : String(cell))
+                                    );
+
+                                    const filePath = saveResultsToCsv(result.columns, result.rows, title);
+                                    if (filePath) {
+                                        outputChannel.appendLine(`Results saved to: ${filePath}`);
+                                    }
+
+                                    const resultHistoryItem: ResultHistoryItem = {
+                                        id: Date.now().toString(),
+                                        query: currentQuery,
+                                        title: title,
+                                        clusterUrl: currentClusterUrl,
+                                        database: currentDatabase,
+                                        rowCount: result.rowCount,
+                                        executionTimeMs: result.executionTimeMs,
+                                        success: true,
+                                        createdAt: new Date().toISOString(),
+                                        type: currentQueryType,
+                                        columns: result.columns,
+                                        sampleRows: sampleRows,
+                                        filePath: filePath
+                                    };
+                                    outputChannel.appendLine(`Saving result to history: ${title}, ${result.rowCount} rows, type=${currentQueryType}`);
+                                    await client.saveResultHistory(resultHistoryItem);
+                                    outputChannel.appendLine('Result saved to results history successfully');
+                                    resultsHistoryProvider.refresh();
+                                } catch (e) {
+                                    const errMsg = e instanceof Error ? e.message : String(e);
+                                    outputChannel.appendLine(`Failed to save to results history: ${errMsg}`);
+                                }
+                            }
+                        } else {
+                            outputChannel.appendLine(`Query failed: ${result.error}`);
+                            resultsProvider.showError(result.error || 'Query failed', currentTabId);
                         }
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : 'Unknown error';
+                        outputChannel.appendLine(`Query error: ${message}`);
+                        resultsProvider.showError(message, currentTabId);
+                        vscode.window.showErrorMessage(`Query failed: ${message}`);
+                    } finally {
+                        vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', false);
                     }
-                } else {
-                    outputChannel.appendLine(`Query failed: ${result.error}`);
-                    resultsProvider.showError(result.error || 'Query failed', loadingTabId);
-                    // Don't save failed queries to results history
-                }
+                })();
+
+                // Return immediately to allow concurrent queries
+                return;
             } catch (error) {
+                // Handle errors before query execution (health check, etc.)
                 const message = error instanceof Error ? error.message : 'Unknown error';
-                outputChannel.appendLine(`Query error: ${message}`);
-                resultsProvider.showError(message, loadingTabId);
-                vscode.window.showErrorMessage(`Query failed: ${message}`);
-            } finally {
-                // Clear running context
-                await vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', false);
+                outputChannel.appendLine(`Pre-query error: ${message}`);
+                vscode.window.showErrorMessage(`Failed to start query: ${message}`);
             }
         })
     );
