@@ -71,7 +71,7 @@ npm test
 
 ## Key Dependencies
 
-- **Server:** StreamJsonRpc, MyTools.Core, MyUtils (project references to sibling `../MyTools/` directory)
+- **Server:** StreamJsonRpc, MyTools.Core, MyUtils (included in `/libs` directory)
 - **Extension:** VS Code API 1.85+, TypeScript 5.3
 
 ## Constraints

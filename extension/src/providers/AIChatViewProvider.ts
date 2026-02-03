@@ -289,10 +289,10 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
     private _openFeedback() {
         const version = '0.4.1';
-        const subject = encodeURIComponent('Quest Feedback');
-        const body = encodeURIComponent(`\n\n---\nQuest v${version}\nVS Code: ${vscode.version}\nOS: ${process.platform}`);
-        const mailtoUrl = `mailto:inrotem@microsoft.com?subject=${subject}&body=${body}`;
-        vscode.env.openExternal(vscode.Uri.parse(mailtoUrl));
+        const title = encodeURIComponent('Feedback: ');
+        const body = encodeURIComponent(`## Description\n\n\n\n---\n**Environment:**\n- Quest: v${version}\n- VS Code: ${vscode.version}\n- OS: ${process.platform}`);
+        const issueUrl = `https://github.com/InbarR/Quest/issues/new?title=${title}&body=${body}`;
+        vscode.env.openExternal(vscode.Uri.parse(issueUrl));
     }
 
     private async _handleQuickAction(action: string) {

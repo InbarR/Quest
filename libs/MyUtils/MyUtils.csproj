@@ -1,0 +1,72 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <RootNamespace>MyUtils</RootNamespace>
+    <AssemblyName>MyUtils</AssemblyName>
+    <UseWindowsForms Condition="'$(TargetFramework)' == 'net48'">true</UseWindowsForms>
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.12" />
+    <PackageReference Include="Azure.Core" Version="1.49.0" />
+    <PackageReference Include="Azure.Identity" Version="1.16.0" />
+    <PackageReference Include="OpenAI" Version="2.7.0" />
+    <PackageReference Include="System.ClientModel" Version="1.8.1" />
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="System.Resources.Extensions" Version="5.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
+
+  <!-- Shared files for both frameworks -->
+  <ItemGroup>
+    <Compile Include="StringExtensions.cs" />
+    <Compile Include="AI\AIChat.cs" />
+    <Compile Include="AI\CopilotClient.cs" />
+    <Compile Include="AI\AIHelper.cs" />
+    <Compile Include="AI\QueryTitleGenerator.cs" />
+  </ItemGroup>
+
+  <!-- Windows Forms specific files - only for net48 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Compile Include="Common.cs" />
+    <Compile Include="InputForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="InputForm.Designer.cs">
+      <DependentUpon>InputForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="ListViewComparer.cs" />
+    <Compile Include="MyListView.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="AI\AIChatControl.cs" />
+    <Compile Include="AI\AIChatControl.Designer.cs">
+      <DependentUpon>AIChatControl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <EmbeddedResource Include="InputForm.resx">
+      <DependentUpon>InputForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="AI\AIChatControl.resx">
+      <DependentUpon>AIChatControl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

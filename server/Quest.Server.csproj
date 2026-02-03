@@ -23,8 +23,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\MyTools\MyTools.Core\MyTools.Core.csproj" />
-    <ProjectReference Include="..\..\MyTools\MyUtils\MyUtils.csproj" />
+    <ProjectReference Include="..\libs\MyTools.Core\MyTools.Core.csproj" />
+    <ProjectReference Include="..\libs\MyUtils\MyUtils.csproj" />
   </ItemGroup>
 
 </Project>

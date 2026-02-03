@@ -4,6 +4,8 @@ server/obj/
 server/publish/
 server.Tests/bin/
 server.Tests/obj/
+libs/*/bin/
+libs/*/obj/
 extension/out/
 extension/server/
 extension/*.vsix
@@ -33,3 +35,6 @@ tmpclaude-*
 
 # Backlog (local task tracking)
 backlog/
+
+# Claude settings (local)
+.claude/settings.local.json
