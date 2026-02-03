@@ -36,6 +36,15 @@ export function registerClusterCommands(
                 });
             }
 
+            // Add URL option for ADO mode
+            if (currentMode === 'ado') {
+                options.splice(1, 0, {
+                    label: '$(link) From URL',
+                    value: 'url',
+                    description: 'Paste a work item or project URL'
+                });
+            }
+
             const method = await vscode.window.showQuickPick(options, {
                 placeHolder: 'How would you like to add the data source?'
             });
@@ -46,6 +55,8 @@ export function registerClusterCommands(
                 await addDataSourceFromImage(client, clusterProvider, currentMode);
             } else if (method.value === 'kustoExplorer') {
                 await importFromKustoExplorer(client, clusterProvider);
+            } else if (method.value === 'url') {
+                await addAdoFromUrl(client, clusterProvider);
             } else {
                 if (currentMode === 'kusto') {
                     await addKustoCluster(client, clusterProvider);
@@ -513,6 +524,109 @@ async function addKustoCluster(client: SidecarClient, clusterProvider: ClusterTr
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         vscode.window.showErrorMessage(`Failed to add cluster: ${message}`);
+    }
+}
+
+async function addAdoFromUrl(client: SidecarClient, clusterProvider: ClusterTreeProvider) {
+    const url = await vscode.window.showInputBox({
+        prompt: 'Paste an Azure DevOps URL (work item, project, or board)',
+        placeHolder: 'https://dev.azure.com/org/project/... or https://org.visualstudio.com/project/...',
+        ignoreFocusOut: true,
+        validateInput: (value) => {
+            if (!value) {
+                return 'URL is required';
+            }
+            if (!value.includes('dev.azure.com') && !value.includes('visualstudio.com')) {
+                return 'Invalid Azure DevOps URL';
+            }
+            return undefined;
+        }
+    });
+
+    if (!url) {
+        return;
+    }
+
+    // Parse the URL to extract org and project
+    const parsed = parseAdoUrl(url);
+    if (!parsed) {
+        vscode.window.showErrorMessage('Could not extract organization and project from URL');
+        return;
+    }
+
+    // Confirm with user
+    const name = await vscode.window.showInputBox({
+        prompt: 'Enter a display name',
+        placeHolder: `${parsed.org}/${parsed.project}`,
+        value: `${parsed.org}/${parsed.project}`,
+        ignoreFocusOut: true
+    });
+
+    if (!name) {
+        return;
+    }
+
+    try {
+        const cluster: ClusterInfo = {
+            id: Date.now().toString(),
+            name: name,
+            url: parsed.orgUrl,
+            database: parsed.project,
+            type: 'ado',
+            isFavorite: false,
+            organization: parsed.org
+        };
+
+        await client.addCluster(cluster);
+        clusterProvider.refresh();
+        vscode.window.showInformationMessage(`Added "${name}" from URL`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        vscode.window.showErrorMessage(`Failed to add organization: ${message}`);
+    }
+}
+
+/**
+ * Parse Azure DevOps URLs to extract org and project
+ * Supports:
+ * - https://dev.azure.com/{org}/{project}/...
+ * - https://{org}.visualstudio.com/{project}/...
+ */
+function parseAdoUrl(url: string): { org: string; project: string; orgUrl: string } | null {
+    try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        const pathParts = parsed.pathname.split('/').filter(p => p);
+
+        // Format: https://dev.azure.com/{org}/{project}/...
+        if (hostname === 'dev.azure.com') {
+            if (pathParts.length >= 2) {
+                const org = pathParts[0];
+                const project = pathParts[1];
+                return {
+                    org,
+                    project,
+                    orgUrl: `https://dev.azure.com/${org}`
+                };
+            }
+        }
+
+        // Format: https://{org}.visualstudio.com/{project}/...
+        if (hostname.endsWith('.visualstudio.com')) {
+            const org = hostname.replace('.visualstudio.com', '');
+            if (pathParts.length >= 1) {
+                const project = pathParts[0];
+                return {
+                    org,
+                    project,
+                    orgUrl: `https://${hostname}`
+                };
+            }
+        }
+
+        return null;
+    } catch {
+        return null;
     }
 }
 
