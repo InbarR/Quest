@@ -1220,7 +1220,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 32px 48px;
+            padding: 24px 32px;
+            min-width: 280px;
+            max-width: 400px;
             background: var(--vscode-editor-background);
             border: 1px solid var(--vscode-panel-border);
             border-radius: 8px;
@@ -1266,21 +1268,23 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             border-color: var(--vscode-focusBorder);
         }
         .loading-query-label {
-            margin-top: 20px;
-            font-size: 11px;
+            margin-top: 16px;
+            margin-bottom: 6px;
+            font-size: 10px;
             color: var(--vscode-descriptionForeground);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            opacity: 0.7;
         }
         .loading-query {
-            margin-top: 8px;
-            max-width: 500px;
-            max-height: 80px;
+            width: 100%;
+            max-height: 60px;
             overflow: hidden;
             background: var(--vscode-textCodeBlock-background);
-            border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
-            padding: 8px 12px;
+            padding: 8px 10px;
+            margin-bottom: 16px;
+            box-sizing: border-box;
         }
         .loading-query pre {
             margin: 0;
@@ -1288,8 +1292,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             word-break: break-word;
             font-family: var(--vscode-editor-font-family);
             font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            line-height: 1.4;
+            color: var(--vscode-foreground);
+            line-height: 1.3;
+            opacity: 0.8;
         }
         .error-container {
             display: flex;
@@ -1994,8 +1999,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     document.getElementById('reRunBtn').style.display = 'none'; // Hide during loading
                     document.getElementById('clearColorsBtn').style.display = 'none';
                     // Show loading with query preview and cancel button
-                    const queryPreview = loadingQuery ? '<div class="loading-query-label">Query</div><div class="loading-query"><pre>' + escapeHtml(loadingQuery.substring(0, 300) + (loadingQuery.length > 300 ? '...' : '')) + '</pre></div>' : '';
-                    document.getElementById('container').innerHTML = '<div class="loading"><div class="loading-card"><div class="loading-spinner"></div><div class="loading-text">Executing query</div><div class="loading-timer">0.0s</div><button class="loading-cancel" onclick="cancelQuery()">Cancel</button></div>' + queryPreview + '</div>';
+                    const queryPreview = loadingQuery ? '<div class="loading-query-label">Query</div><div class="loading-query"><pre>' + escapeHtml(loadingQuery.substring(0, 200) + (loadingQuery.length > 200 ? '...' : '')) + '</pre></div>' : '';
+                    document.getElementById('container').innerHTML = '<div class="loading"><div class="loading-card"><div class="loading-spinner"></div><div class="loading-text">Executing query</div><div class="loading-timer">0.0s</div>' + queryPreview + '<button class="loading-cancel" onclick="cancelQuery()">Cancel</button></div></div>';
                     startTimer();
                     break;
                 case 'updateState':
