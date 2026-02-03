@@ -13,6 +13,28 @@ using System.Threading.Tasks;
 namespace MyUtils.AI
 {
     /// <summary>
+    /// Exception thrown when device code authentication is required.
+    /// </summary>
+    public class DeviceCodeAuthRequiredException : Exception
+    {
+        public string UserCode { get; }
+        public string VerificationUri { get; }
+        public string DeviceCode { get; }
+        public int ExpiresIn { get; }
+        public int Interval { get; }
+
+        public DeviceCodeAuthRequiredException(string userCode, string verificationUri, string deviceCode, int expiresIn, int interval)
+            : base($"Device code authentication required. Visit {verificationUri} and enter code: {userCode}")
+        {
+            UserCode = userCode;
+            VerificationUri = verificationUri;
+            DeviceCode = deviceCode;
+            ExpiresIn = expiresIn;
+            Interval = interval;
+        }
+    }
+
+    /// <summary>
     /// Direct GitHub Copilot client that bypasses the need for a proxy server.
     /// Implements authentication and API calls directly to GitHub's Copilot endpoints.
     /// </summary>
@@ -241,6 +263,7 @@ namespace MyUtils.AI
 
         /// <summary>
         /// Ensures GitHub token is available, either by loading from storage or initiating device code auth.
+        /// If no callback is provided and auth is needed, throws DeviceCodeAuthRequiredException.
         /// </summary>
         public async Task<string> EnsureGitHubTokenAsync(CancellationToken ct = default)
         {
@@ -262,16 +285,25 @@ namespace MyUtils.AI
             // No stored token found, initiate device code authentication
             _log("No stored GitHub token found. Starting device code authentication...", false);
             var deviceCode = await StartAuthenticationAsync(ct);
-            
-            // Show the device code dialog if callback is provided
-            object dialogInstance = null;
-            if (_deviceCodeCallback != null)
+
+            // If no callback, throw exception so caller can handle UI
+            if (_deviceCodeCallback == null)
             {
-                dialogInstance = await _deviceCodeCallback(deviceCode.user_code, deviceCode.verification_uri);
+                _log($"Device code auth required: {deviceCode.verification_uri} code: {deviceCode.user_code}", false);
+                throw new DeviceCodeAuthRequiredException(
+                    deviceCode.user_code,
+                    deviceCode.verification_uri,
+                    deviceCode.device_code,
+                    deviceCode.expires_in,
+                    deviceCode.interval
+                );
             }
-            
+
+            // Show the device code dialog if callback is provided
+            object dialogInstance = await _deviceCodeCallback(deviceCode.user_code, deviceCode.verification_uri);
+
             var token = await PollForAccessTokenAsync(deviceCode, ct);
-            
+
             // Close the dialog if it's available and has CompleteAuthentication method
             if (dialogInstance != null)
             {

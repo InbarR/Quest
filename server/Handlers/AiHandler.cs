@@ -75,11 +75,23 @@ public class AiHandler
                 SuggestedQuery: suggestedQuery
             );
         }
+        catch (MyUtils.AI.DeviceCodeAuthRequiredException authEx)
+        {
+            _log?.Invoke($"[AI] Device code auth required: {authEx.VerificationUri} code: {authEx.UserCode}");
+            return new AiChatResponse(
+                Message: $"GitHub authentication required.\n\nVisit: {authEx.VerificationUri}\nEnter code: **{authEx.UserCode}**\n\nAfter authorizing, try your request again.",
+                SessionId: sessionId,
+                SuggestedQuery: null,
+                AuthRequired: true,
+                AuthUrl: authEx.VerificationUri,
+                AuthCode: authEx.UserCode
+            );
+        }
         catch (Exception ex)
         {
             _log?.Invoke($"[AI] Exception: {ex.GetType().Name}: {ex.Message}");
             return new AiChatResponse(
-                Message: $"AI request failed: {ex.Message}\n\nIf using GitHub Copilot, you may need to authenticate. Check the Output panel for device code instructions.",
+                Message: $"AI request failed: {ex.Message}",
                 SessionId: sessionId,
                 SuggestedQuery: null
             );

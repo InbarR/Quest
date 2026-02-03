@@ -398,6 +398,27 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
             this.outputChannel.appendLine(`[AI Chat] Response received (session: ${response.sessionId}): ${response.message?.substring(0, 100) || '(empty)'}...`);
 
+            // Handle device code authentication required
+            if (response.authRequired && response.authUrl && response.authCode) {
+                this.outputChannel.appendLine(`[AI Chat] Device code auth required: ${response.authUrl} code: ${response.authCode}`);
+
+                const openBrowser = await vscode.window.showInformationMessage(
+                    `GitHub authentication required.\n\nCode: ${response.authCode}`,
+                    { modal: false },
+                    'Open GitHub',
+                    'Copy Code'
+                );
+
+                if (openBrowser === 'Open GitHub') {
+                    await vscode.env.openExternal(vscode.Uri.parse(response.authUrl));
+                    await vscode.env.clipboard.writeText(response.authCode);
+                    vscode.window.showInformationMessage(`Code "${response.authCode}" copied to clipboard. Paste it on GitHub to authorize.`);
+                } else if (openBrowser === 'Copy Code') {
+                    await vscode.env.clipboard.writeText(response.authCode);
+                    vscode.window.showInformationMessage(`Code copied. Visit ${response.authUrl} to authorize.`);
+                }
+            }
+
             if (!response.message || response.message.trim() === '') {
                 throw new Error('AI returned empty response. Check Output > Quest for details.');
             }

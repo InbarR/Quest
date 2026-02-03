@@ -72,7 +72,14 @@ public record AiContext(
     string[]? Favorites = null,
     string[]? RecentQueries = null
 );
-public record AiChatResponse(string Message, string SessionId, string? SuggestedQuery = null);
+public record AiChatResponse(
+    string Message,
+    string SessionId,
+    string? SuggestedQuery = null,
+    bool AuthRequired = false,
+    string? AuthUrl = null,
+    string? AuthCode = null
+);
 public record GenerateTitleRequest(string Query);
 public record GenerateTitleResponse(string Title);
 

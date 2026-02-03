@@ -94,6 +94,9 @@ export interface AiChatResponse {
     message: string;
     sessionId: string;
     suggestedQuery?: string;
+    authRequired?: boolean;
+    authUrl?: string;
+    authCode?: string;
 }
 
 export interface ResultHistoryItem {
