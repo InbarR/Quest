@@ -2403,9 +2403,14 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
         // ADO Work Item Preview Panel
         let previewPanel = null;
-        // Check if a field contains HTML content
+        // Check if a field contains HTML content (for ADO work items)
         function isHtmlField(colName) {
-            const htmlFields = ['description', 'reprosteps', 'repro steps', 'system.description', 'microsoft.vsts.tcm.reprosteps', 'acceptancecriteria', 'resolution'];
+            const htmlFields = [
+                'description', 'reprosteps', 'repro steps', 'system.description',
+                'microsoft.vsts.tcm.reprosteps', 'acceptancecriteria', 'resolution',
+                'history', 'system.history', 'discussion', 'comments',
+                'systeminfo', 'system.info', 'foundinfo', 'analysisresults'
+            ];
             return htmlFields.some(f => colName.toLowerCase().replace(/[^a-z]/g, '').includes(f.replace(/[^a-z]/g, '')));
         }
 
