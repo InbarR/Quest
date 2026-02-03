@@ -1929,6 +1929,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                         lastClickedRow = -1;
                         hiddenColumns.clear();
                         closeColumnSelector();
+                        closePreview(); // Close preview panel when switching tabs
                         // Restore filter state for the new tab
                         const newFilterText = msg.filterText || '';
                         const newFilterMode = msg.filterMode || 'filter';
