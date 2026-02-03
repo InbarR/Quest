@@ -23,26 +23,68 @@ A powerful VS Code extension for querying multiple data sources with AI assistan
 - Get intelligent query suggestions and improvements
 - Supports GitHub Copilot, Azure OpenAI, and GitHub Models
 
-### Rich Results Viewer
+### Query Editor
 
-- Tabbed interface for multiple concurrent queries
-- Real-time filtering and highlighting
-- Column visibility toggle and reordering
-- Row selection (Ctrl+Click, Shift+Click for multi-select)
-- Export to CSV/JSON
-- Color-coded rows based on custom rules
-- Preview panel for ADO work items (renders HTML description/repro steps)
-- Preview panel for Kusto row details
-- Double-click to open items in browser/Outlook
+The editor provides a rich query writing experience:
 
-### Developer Experience
+| Feature | Description |
+|---------|-------------|
+| **Syntax Highlighting** | Full colorization for KQL, WIQL, and OQL |
+| **IntelliSense** | Schema-aware autocomplete with table/column suggestions |
+| **Hover Documentation** | Function and operator documentation on hover |
+| **Run Button** | Execute query with the play button in editor toolbar |
+| **Mode Selector** | Switch between Kusto, ADO, and Outlook modes |
 
-- Syntax highlighting for KQL, WIQL, and OQL
-- IntelliSense with schema-aware autocomplete
-- Hover documentation for functions and operators
-- Query history with search
-- Favorites management
-- Keyboard shortcuts for common actions
+### Results Panel
+
+The results panel displays query output with powerful features:
+
+| Button/Feature | Description |
+|----------------|-------------|
+| **Filter Box** | Real-time text filtering across all columns with match highlighting |
+| **Column Toggle** | Show/hide columns using the columns dropdown |
+| **Export CSV** | Download results as CSV file |
+| **Export JSON** | Download results as JSON file |
+| **Preview** | Show detailed preview of selected row (HTML rendering for ADO fields) |
+| **Open Item** | Double-click rows to open in browser (ADO) or Outlook |
+| **Cancel** | Stop long-running queries with the cancel button |
+| **Tabs** | Multiple result tabs for concurrent queries |
+
+**Row Selection:**
+- Click to select a single row
+- Ctrl+Click to add/remove from selection
+- Shift+Click to select a range
+
+### Data Sources Panel
+
+Manage your connections in the sidebar:
+
+| Button | Description |
+|--------|-------------|
+| **Add (+)** | Add a new cluster, ADO organization, or configure Outlook |
+| **Refresh** | Reload schema and database list |
+| **Star** | Mark frequently used connections as favorites |
+| **Rename** | Give connections friendly display names |
+| **Remove** | Delete a connection from your list |
+
+### AI Chat Panel
+
+Get AI assistance for your queries:
+
+| Feature | Description |
+|---------|-------------|
+| **Generate Query** | Describe what you want in natural language |
+| **Explain Query** | Paste a query to get a plain English explanation |
+| **Improve Query** | Get suggestions for optimization |
+| **Insert to Editor** | Click to insert AI-generated queries directly |
+
+### Favorites & History
+
+| Panel | Description |
+|-------|-------------|
+| **Favorites** | Save frequently used queries with custom names |
+| **History** | Browse and search previously executed queries |
+| **Results History** | Access past query results with metadata |
 
 ## Architecture
 
@@ -183,17 +225,6 @@ Inbox
 | project Subject, From, ReceivedTime
 | take 50
 ```
-
-### Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `F5` | Run Query |
-| `Ctrl+Enter` | Run Query |
-| `Shift+F5` | Cancel Query |
-| `Ctrl+Shift+S` | Save as Favorite |
-| `Ctrl+Shift+A` | Open AI Chat |
-| `F1` | Show Keyboard Shortcuts |
 
 ## Project Structure
 
