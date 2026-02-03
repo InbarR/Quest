@@ -22,27 +22,19 @@ export function registerClusterCommands(
             }
 
             // Build options based on mode
-            const options: { label: string; value: string; description: string }[] = [
-                { label: '$(edit) Enter Manually', value: 'manual', description: 'Type cluster/org details' },
-                { label: '$(device-camera) From Screenshot', value: 'image', description: 'Extract from image using AI' }
-            ];
+            const options: { label: string; value: string; description: string }[] = [];
 
-            // Add Kusto Explorer import option for Kusto mode
             if (currentMode === 'kusto') {
-                options.push({
-                    label: '$(file-symlink-directory) Import from Kusto Explorer',
-                    value: 'kustoExplorer',
-                    description: 'Import connections from Kusto Explorer'
-                });
-            }
-
-            // Add URL option for ADO mode
-            if (currentMode === 'ado') {
-                options.splice(1, 0, {
-                    label: '$(link) From URL',
-                    value: 'url',
-                    description: 'Paste a work item or project URL'
-                });
+                options.push(
+                    { label: '$(edit) Enter Manually', value: 'manual', description: 'Type cluster details' },
+                    { label: '$(device-camera) From Screenshot', value: 'image', description: 'Extract from image using AI' },
+                    { label: '$(file-symlink-directory) Import from Kusto Explorer', value: 'kustoExplorer', description: 'Import connections from Kusto Explorer' }
+                );
+            } else if (currentMode === 'ado') {
+                options.push(
+                    { label: '$(edit) Enter Manually', value: 'manual', description: 'Type organization details' },
+                    { label: '$(link) From URL', value: 'url', description: 'Paste a work item or project URL' }
+                );
             }
 
             const method = await vscode.window.showQuickPick(options, {
