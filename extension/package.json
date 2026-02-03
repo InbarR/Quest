@@ -425,9 +425,20 @@
       },
       {
         "command": "queryStudio.runQuery",
+        "key": "F5",
+        "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
+      },
+      {
+        "command": "queryStudio.runQuery",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
       },
       {
         "command": "queryStudio.cancelQuery",
