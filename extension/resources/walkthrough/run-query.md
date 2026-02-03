@@ -1,38 +1,63 @@
 # Run Your Query
 
-Execute queries and view results with a single keystroke.
+Execute queries and explore results with powerful tools.
 
 ## Running Queries
 
 | Shortcut | Action |
 |----------|--------|
-| **F5** | Run current query |
-| **Ctrl+Enter** | Run current query |
+| **F5** | Run query at cursor |
+| **Ctrl+Enter** | Run query at cursor |
 | **Shift+F5** | Cancel running query |
 
-You can also click the **Run** button in the editor toolbar.
+You can also click the **▶ Run** button in the editor toolbar.
 
-## Multi-Query Files
+## Results Panel Toolbar
 
-When your file contains multiple queries separated by blank lines, Quest runs only the query at your cursor position.
+The results panel has these buttons:
 
-```kql
-// Query 1 - cursor here runs this one
-StormEvents | take 10
+| Button | Description |
+|--------|-------------|
+| **▶ Re-run** | Execute the query again |
+| **📋 Copy Query** | Copy query with cluster info to clipboard |
+| **💾 Save** | Save query to favorites |
+| **📤 Export** | Export results to CSV or JSON |
+| **🎨 Clear Colors** | Remove all color highlighting rules |
+| **🔗 Open in ADX** | Open query in Azure Data Explorer web (Kusto only) |
+| **🔗 Open in ADO** | Open query in Azure DevOps web (ADO only) |
 
-// Query 2
-StormEvents | summarize count() by State
-```
+## Results Table Features
 
-## Results Panel
+### Column Actions (click column header)
+- **Sort** ascending/descending
+- **Hide column** to reduce clutter
+- **Highlight column** for emphasis
 
-Results appear in the bottom panel with these features:
+### Row Actions
+- **Single click** - Select row
+- **Ctrl+Click** - Add/remove from selection
+- **Shift+Click** - Select range
+- **Double-click** - Open item (ADO work item, Outlook email, or URL)
 
-- **Sort** - Click column headers to sort
-- **Filter** - Type to filter rows
-- **Export** - Export to CSV, JSON, or copy to clipboard
-- **Re-run** - Click to run the query again
+### Right-Click Context Menu
+- **Copy cell/row/selection** - Various copy options
+- **Filter** - Quick filter by value
+- **Preview** - See full row details in side panel
+- **Color by value** - Add highlighting rule
+- **View as JSON** - Expand complex values
 
-## Results History
+## Filter Box
 
-Your recent query results are saved automatically. Find them in the **Saved Results** panel to review past executions.
+Type in the filter box to search results:
+- `text` - Filter rows containing "text"
+- `column::value` - Filter specific column
+- `!text` - Exclude rows with "text"
+
+Toggle between **Filter** (hide non-matching) and **Highlight** (show all, highlight matches) modes.
+
+## Tabs
+
+Run multiple queries and switch between results using tabs. Each tab shows:
+- Query type icon (Kusto/ADO/Outlook)
+- Row count
+- Execution time

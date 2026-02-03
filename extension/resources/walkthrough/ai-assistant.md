@@ -2,39 +2,64 @@
 
 Get intelligent help writing, fixing, and understanding your queries.
 
-## Quick Actions
+## AI Chat Panel
 
-The AI Assistant provides one-click actions:
+Open with **Ctrl+Shift+A** or click the AI Chat icon in the sidebar.
 
-| Action | What it does |
+### Chat Toolbar Buttons
+
+| Button | Description |
+|--------|-------------|
+| **🗑️ Clear** | Clear chat history |
+| **📋 Copy** | Copy last response |
+| **⚙️ Settings** | Configure AI provider |
+
+### Quick Action Buttons
+
+Click these for instant help with your current query:
+
+| Button | What it does |
 |--------|--------------|
-| **Fix** | Identify and fix syntax errors |
-| **Improve** | Optimize performance and readability |
-| **Explain** | Understand what a query does step-by-step |
+| **🔧 Fix** | Find and fix syntax errors |
+| **✨ Improve** | Optimize for performance and readability |
+| **📖 Explain** | Step-by-step explanation of the query |
+| **📝 Document** | Add comments explaining the query |
 
 ## Chat Interface
 
-Open the AI Chat panel (Ctrl+Shift+A) for conversational help:
+Type natural language requests:
 
 - "Write a query to find emails from last week"
-- "How do I count events by category?"
+- "Count events grouped by category"
 - "What's wrong with this query?"
-- "Make this query faster"
+- "Make this query run faster"
+- "Add a filter for the last 24 hours"
 
-## Context-Aware Suggestions
+## Generated Query Actions
 
-The AI understands your context:
+When the AI suggests a query, buttons appear:
 
-- **Current query** - Sees what you're working on
-- **Favorites** - Knows your saved queries
-- **History** - Remembers recent queries
-- **Schema** - Aware of your tables and columns
+| Button | Action |
+|--------|--------|
+| **▶ Use Query** | Replace your editor content with the suggestion |
+| **📋 Copy** | Copy the query to clipboard |
 
-## Using Generated Queries
+## Context Awareness
 
-When the AI suggests a query, you can:
+The AI automatically knows:
 
-- **Use** - Replace your current query
-- **Copy** - Copy to clipboard
+- **Current query** - What you're editing
+- **Active cluster/database** - Your connection context
+- **Schema** - Available tables and columns
+- **Recent results** - Your last query output
+- **Favorites** - Your saved query patterns
 
-The AI Chat panel is in the sidebar for easy access while you work.
+## AI Provider Settings
+
+Configure your AI provider in settings:
+
+- **GitHub Copilot** - Uses your Copilot subscription
+- **GitHub Models** - Free tier available
+- **Azure OpenAI** - Use your own Azure deployment
+
+Access settings via the ⚙️ button or VS Code settings (`queryStudio.ai.*`).
