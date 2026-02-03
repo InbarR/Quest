@@ -2,7 +2,7 @@
   "name": "quest",
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "inbar-rotem",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -432,13 +432,37 @@
         "command": "queryStudio.runQuery",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && editorLangId == kql"
       },
       {
         "command": "queryStudio.runQuery",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
-        "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
+        "when": "editorTextFocus && editorLangId == wiql"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == oql"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && resourceExtname == .kql"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && resourceExtname == .wiql"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && resourceExtname == .oql"
       },
       {
         "command": "queryStudio.cancelQuery",

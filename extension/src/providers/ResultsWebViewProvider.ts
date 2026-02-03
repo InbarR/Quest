@@ -286,7 +286,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _openBugReport() {
-        const version = '0.4.1';
+        const version = '0.4.2';
         const title = encodeURIComponent('Bug: ');
         const body = encodeURIComponent(`## Description\n\n\n\n## Steps to Reproduce\n\n1. \n2. \n3. \n\n## Expected Behavior\n\n\n\n## Actual Behavior\n\n\n\n---\n**Environment:**\n- Quest: v${version}\n- VS Code: ${vscode.version}\n- OS: ${process.platform}`);
         const issueUrl = `https://github.com/InbarR/Quest/issues/new?title=${title}&body=${body}`;
@@ -1213,49 +1213,70 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             justify-content: center;
             align-items: center;
             height: 100%;
-            padding: 20px;
+            padding: 40px 20px;
             text-align: center;
         }
+        .loading-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 32px 48px;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
         .loading-spinner {
-            width: 32px;
-            height: 32px;
+            width: 40px;
+            height: 40px;
             border: 3px solid var(--vscode-panel-border);
-            border-top-color: var(--vscode-focusBorder);
+            border-top-color: var(--vscode-progressBar-background, #0078d4);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 12px;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
         .loading-text {
             color: var(--vscode-foreground);
-            font-size: 13px;
-            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
         }
         .loading-timer {
             color: var(--vscode-descriptionForeground);
-            font-size: 12px;
+            font-size: 24px;
+            font-weight: 300;
             font-variant-numeric: tabular-nums;
+            margin-bottom: 16px;
         }
         .loading-cancel {
-            margin-top: 12px;
-            padding: 6px 16px;
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-            border: none;
+            padding: 8px 24px;
+            background: transparent;
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
+            transition: all 0.15s ease;
         }
         .loading-cancel:hover {
             background: var(--vscode-button-secondaryHoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+        .loading-query-label {
+            margin-top: 20px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .loading-query {
-            margin-top: 16px;
-            max-width: 600px;
-            max-height: 150px;
-            overflow: auto;
+            margin-top: 8px;
+            max-width: 500px;
+            max-height: 80px;
+            overflow: hidden;
             background: var(--vscode-textCodeBlock-background);
             border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
@@ -1268,13 +1289,95 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             font-family: var(--vscode-editor-font-family);
             font-size: 11px;
             color: var(--vscode-descriptionForeground);
+            line-height: 1.4;
         }
         .error-container {
             display: flex;
             flex-direction: column;
-            padding: 16px;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
             height: 100%;
             box-sizing: border-box;
+        }
+        .error-card {
+            max-width: 500px;
+            width: 100%;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+        .error-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(220, 50, 50, 0.15) 0%, rgba(220, 50, 50, 0.05) 100%);
+            border-bottom: 1px solid rgba(220, 50, 50, 0.2);
+        }
+        .error-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(220, 50, 50, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #f14c4c;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .error-title {
+            color: #f14c4c;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .error-body {
+            padding: 20px;
+        }
+        .error-message {
+            background: var(--vscode-textCodeBlock-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 12px 16px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 12px;
+            color: var(--vscode-foreground);
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow: auto;
+        }
+        .error-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .error-btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: none;
+        }
+        .error-btn-primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .error-btn-primary:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        .error-btn-secondary {
+            background: transparent;
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-panel-border);
+        }
+        .error-btn-secondary:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
         }
         .error-banner {
             display: flex;
@@ -1891,8 +1994,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     document.getElementById('reRunBtn').style.display = 'none'; // Hide during loading
                     document.getElementById('clearColorsBtn').style.display = 'none';
                     // Show loading with query preview and cancel button
-                    const queryPreview = loadingQuery ? '<div class="loading-query"><pre>' + escapeHtml(loadingQuery.substring(0, 500) + (loadingQuery.length > 500 ? '...' : '')) + '</pre></div>' : '';
-                    document.getElementById('container').innerHTML = '<div class="loading"><div class="loading-spinner"></div><div class="loading-text">Running query...</div><div class="loading-timer">0.0s</div><button class="loading-cancel" onclick="cancelQuery()">⏹ Cancel</button>' + queryPreview + '</div>';
+                    const queryPreview = loadingQuery ? '<div class="loading-query-label">Query</div><div class="loading-query"><pre>' + escapeHtml(loadingQuery.substring(0, 300) + (loadingQuery.length > 300 ? '...' : '')) + '</pre></div>' : '';
+                    document.getElementById('container').innerHTML = '<div class="loading"><div class="loading-card"><div class="loading-spinner"></div><div class="loading-text">Executing query</div><div class="loading-timer">0.0s</div><button class="loading-cancel" onclick="cancelQuery()">Cancel</button></div>' + queryPreview + '</div>';
                     startTimer();
                     break;
                 case 'updateState':
@@ -1996,7 +2099,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 // Only create loading HTML if not already showing loading state
                 if (!container.querySelector('.loading')) {
                     const elapsed = queryStartTime ? ((Date.now() - queryStartTime) / 1000).toFixed(1) : '0.0';
-                    container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div class="loading-text">Running query...</div><div class="loading-timer">' + elapsed + 's</div><button class="loading-cancel" onclick="cancelQuery()">⏹ Cancel</button></div>';
+                    container.innerHTML = '<div class="loading"><div class="loading-card"><div class="loading-spinner"></div><div class="loading-text">Executing query</div><div class="loading-timer">' + elapsed + 's</div><button class="loading-cancel" onclick="cancelQuery()">Cancel</button></div></div>';
                 }
                 if (!timerInterval) startTimer();
                 return;
@@ -2018,16 +2121,18 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
             if (!currentData.success) {
                 container.innerHTML = '<div class="error-container">' +
-                    '<div class="error-banner">' +
-                    '<span class="error-banner-icon">✕</span>' +
-                    '<span class="error-banner-text">Query Execution Failed</span>' +
+                    '<div class="error-card">' +
+                    '<div class="error-header">' +
+                    '<div class="error-icon">✕</div>' +
+                    '<span class="error-title">Query Failed</span>' +
                     '</div>' +
-                    '<div class="error-message-box">' +
-                    '<pre class="error-message-text">' + escapeHtml(currentData.error || 'Unknown error') + '</pre>' +
-                    '</div>' +
+                    '<div class="error-body">' +
+                    '<div class="error-message">' + escapeHtml(currentData.error || 'Unknown error') + '</div>' +
                     '<div class="error-actions">' +
-                    '<button class="error-btn" onclick="copyError()">Copy Error</button>' +
-                    (hasConnection ? '<button class="error-btn primary" onclick="reRun()">Retry Query</button>' : '') +
+                    '<button class="error-btn error-btn-secondary" onclick="copyError()">Copy Error</button>' +
+                    (hasConnection ? '<button class="error-btn error-btn-primary" onclick="reRun()">Retry</button>' : '') +
+                    '</div>' +
+                    '</div>' +
                     '</div>' +
                     '</div>';
                 document.getElementById('status').textContent = 'Error';
@@ -2396,9 +2501,6 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 vscode.postMessage({ command: 'openOutlookItem', rowIndex: ri });
                 return;
             }
-            // Default: filter by this value
-            document.getElementById('filterInput').value = currentData.columns[ci] + '::' + v;
-            filterResults(document.getElementById('filterInput').value);
         }
 
         // ADO Work Item Preview Panel
@@ -3628,7 +3730,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         });
     </script>
     <div class="footer">
-        <span><span class="brand">Quest</span> v0.4.1 | by Inbar Rotem</span>
+        <span><span class="brand">Quest</span> v0.4.2 | by Inbar Rotem</span>
         <span>
             <span class="bug-report" onclick="reportBug()" title="Report a bug or send feedback">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
