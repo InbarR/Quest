@@ -2,36 +2,51 @@
 
 Execute queries and explore results with powerful tools.
 
+## Query Editor Toolbar
+
+When you have a query file open, the editor toolbar shows these buttons:
+
+| Button | Name | Description |
+|--------|------|-------------|
+| **▶** | Run Query | Execute the current query (F5) |
+| **⏹** | Cancel | Stop a running query (Shift+F5) |
+| **💡** | Suggest | Get AI suggestions to improve your query |
+| **❓** | Explain | Have AI explain what your query does |
+| **⚙️** | Format | Format and clean up your query |
+
 ## Running Queries
 
-| Shortcut | Action |
-|----------|--------|
-| **F5** | Run query at cursor |
-| **Ctrl+Enter** | Run query at cursor |
-| **Shift+F5** | Cancel running query |
+**Keyboard:** Press **F5** to run the query at cursor position.
 
-You can also click the **▶ Run** button in the editor toolbar.
+**Mouse:** Click the **▶ Run** button in the editor toolbar.
+
+**Query Selection:**
+- If you **select text**, only the selected portion runs
+- If **no selection**, Quest finds the query block at your cursor
+- Query blocks are separated by blank lines
 
 ## Results Panel Toolbar
 
-The results panel has these buttons:
+After a query runs, the results panel shows these buttons:
 
 | Button | Description |
 |--------|-------------|
-| **▶ Re-run** | Execute the query again |
-| **📋 Copy Query** | Copy query with cluster info to clipboard |
-| **💾 Save** | Save query to favorites |
-| **📤 Export** | Export results to CSV or JSON |
-| **🎨 Clear Colors** | Remove all color highlighting rules |
-| **🔗 Open in ADX** | Open query in Azure Data Explorer web (Kusto only) |
-| **🔗 Open in ADO** | Open query in Azure DevOps web (ADO only) |
+| **Set Query** | Load this query into the editor |
+| **Copy** | Copy query with cluster/database info |
+| **Save Result** | Save to results history |
+| **Chart** | Visualize results as a chart |
+| **Pivot** | Create pivot table from results |
+| **Compare** | Compare two result tabs |
+| **Columns** | Show/hide columns |
+| **Presets** | Apply saved column configurations |
 
 ## Results Table Features
 
-### Column Actions (click column header)
+### Column Header Actions
+Click a column header to:
 - **Sort** ascending/descending
-- **Hide column** to reduce clutter
-- **Highlight column** for emphasis
+- **Hide** the column
+- **Highlight** the column
 
 ### Row Actions
 - **Single click** - Select row
@@ -40,8 +55,7 @@ The results panel has these buttons:
 - **Double-click** - Open item (ADO work item, Outlook email, or URL)
 
 ### Right-Click Context Menu
-- **Copy cell/row/selection** - Various copy options
-- **Filter** - Quick filter by value
+- **Copy** - Copy cell, row, or selection
 - **Preview** - See full row details in side panel
 - **Color by value** - Add highlighting rule
 - **View as JSON** - Expand complex values
@@ -49,15 +63,21 @@ The results panel has these buttons:
 ## Filter Box
 
 Type in the filter box to search results:
-- `text` - Filter rows containing "text"
-- `column::value` - Filter specific column
-- `!text` - Exclude rows with "text"
 
-Toggle between **Filter** (hide non-matching) and **Highlight** (show all, highlight matches) modes.
+| Pattern | Description |
+|---------|-------------|
+| `text` | Filter rows containing "text" in any column |
+| `column::value` | Filter specific column |
+| `!text` | Exclude rows containing "text" |
+| `::column` | Highlight a column |
 
-## Tabs
+Click the **mode button** (🔽/🖌️) to toggle between:
+- **Filter mode** - Hide non-matching rows
+- **Highlight mode** - Show all rows, highlight matches
+
+## Multiple Result Tabs
 
 Run multiple queries and switch between results using tabs. Each tab shows:
-- Query type icon (Kusto/ADO/Outlook)
-- Row count
-- Execution time
+- AI-generated title describing the query
+- Row count in brackets
+- Click **×** to close a tab

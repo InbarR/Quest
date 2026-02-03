@@ -429,72 +429,6 @@
         "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
       },
       {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && editorLangId == kql"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && editorLangId == wiql"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && editorLangId == oql"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && resourceExtname == .kql"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && resourceExtname == .wiql"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "-editor.action.insertLineAfter",
-        "when": "editorTextFocus && resourceExtname == .oql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && editorLangId == kql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && editorLangId == wiql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && editorLangId == oql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && resourceExtname == .kql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && resourceExtname == .wiql"
-      },
-      {
-        "command": "queryStudio.runQuery",
-        "key": "ctrl+enter",
-        "mac": "cmd+enter",
-        "when": "editorTextFocus && resourceExtname == .oql"
-      },
-      {
         "command": "queryStudio.cancelQuery",
         "key": "shift+F5",
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
@@ -841,7 +775,7 @@
           {
             "id": "shortcuts",
             "title": "Keyboard Shortcuts",
-            "description": "Master Quest with these shortcuts:\n\n| Shortcut | Action |\n|----------|--------|\n| **F5** | Run Query |\n| **Ctrl+Enter** | Run Query |\n| **Shift+F5** | Cancel Query |\n| **Ctrl+Shift+S** | Save as Favorite |\n| **Ctrl+Shift+A** | Open AI Chat |\n| **Ctrl+Alt+M** | Toggle Mode |\n| **Ctrl+Shift+/** | Show All Shortcuts |\n\n[Show All Shortcuts](command:queryStudio.showKeyboardShortcuts)",
+            "description": "Master Quest with these shortcuts:\n\n| Shortcut | Action |\n|----------|--------|\n| **F5** | Run Query |\n| **Shift+F5** | Cancel Query |\n| **Ctrl+Shift+S** | Save as Favorite |\n| **Ctrl+Shift+A** | Open AI Chat |\n| **Ctrl+Alt+M** | Toggle Mode |\n| **Ctrl+Shift+/** | Show All Shortcuts |\n\n[Show All Shortcuts](command:queryStudio.showKeyboardShortcuts)",
             "media": {
               "markdown": "resources/walkthrough/shortcuts.md"
             }

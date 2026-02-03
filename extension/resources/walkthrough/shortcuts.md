@@ -7,7 +7,6 @@ Master Quest with these essential shortcuts.
 | Shortcut | Action |
 |----------|--------|
 | **F5** | Run query at cursor |
-| **Ctrl+Enter** | Run query at cursor |
 | **Shift+F5** | Cancel running query |
 | **F1** | Show keyboard shortcuts dialog |
 
