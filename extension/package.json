@@ -1,0 +1,811 @@
+{
+  "name": "quest",
+  "displayName": "Quest - Query Studio",
+  "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
+  "version": "0.4.1",
+  "publisher": "inbar-rotem",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inbar-rotem/quest"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Data Science",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "kusto",
+    "kql",
+    "azure data explorer",
+    "azure devops",
+    "wiql",
+    "outlook",
+    "oql",
+    "query",
+    "ai",
+    "copilot"
+  ],
+  "activationEvents": [
+    "onLanguage:kql",
+    "onLanguage:wiql",
+    "onLanguage:oql",
+    "onView:querystudio.clusters",
+    "onCommand:queryStudio.newKqlFile",
+    "onCommand:queryStudio.newWiqlFile",
+    "onCommand:queryStudio.newOqlFile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "queryStudio",
+          "title": "Quest",
+          "icon": "resources/quest.svg"
+        },
+        {
+          "id": "queryStudioAI",
+          "title": "Quest AI",
+          "icon": "$(hubot)"
+        }
+      ],
+      "panel": [
+        {
+          "id": "queryStudioResults",
+          "title": "Query Results",
+          "icon": "$(table)"
+        }
+      ]
+    },
+    "views": {
+      "queryStudio": [
+        {
+          "id": "querystudio.clusters",
+          "name": "Data Sources",
+          "icon": "$(database)"
+        },
+        {
+          "id": "querystudio.presets",
+          "name": "⭐ Favorites",
+          "type": "webview"
+        },
+        {
+          "id": "querystudio.history",
+          "name": "📜 History",
+          "type": "webview"
+        },
+        {
+          "id": "querystudio.resultsHistory",
+          "name": "Saved Results",
+          "type": "webview"
+        },
+        {
+          "id": "querystudio.snippets",
+          "name": "📝 Snippets",
+          "type": "webview"
+        }
+      ],
+      "queryStudioAI": [
+        {
+          "id": "querystudio.aiChat",
+          "name": "🤖 Quest Chat",
+          "type": "webview"
+        }
+      ],
+      "queryStudioResults": [
+        {
+          "id": "querystudio.results",
+          "name": "Results",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "querystudio.clusters",
+        "contents": "No data sources configured.\n\n[$(add) Add Data Source](command:queryStudio.addDataSource)",
+        "when": "!queryStudio.isOutlookMode"
+      },
+      {
+        "view": "querystudio.clusters",
+        "contents": "Outlook mode uses your local Outlook installation.\n\nNo configuration needed - just run your OQL queries!",
+        "when": "queryStudio.isOutlookMode"
+      }
+    ],
+    "languages": [
+      {
+        "id": "kql",
+        "aliases": [
+          "KQL",
+          "Kusto Query Language",
+          "kusto"
+        ],
+        "extensions": [
+          ".kql",
+          ".kusto",
+          ".csl"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "wiql",
+        "aliases": [
+          "WIQL",
+          "Work Item Query Language"
+        ],
+        "extensions": [
+          ".wiql"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "oql",
+        "aliases": [
+          "OQL",
+          "Outlook Query Language",
+          "outlook"
+        ],
+        "extensions": [
+          ".oql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kql",
+        "scopeName": "source.kql",
+        "path": "./syntaxes/kql.tmLanguage.json"
+      },
+      {
+        "language": "wiql",
+        "scopeName": "source.wiql",
+        "path": "./syntaxes/wiql.tmLanguage.json"
+      },
+      {
+        "language": "oql",
+        "scopeName": "source.oql",
+        "path": "./syntaxes/oql.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "queryStudio.welcome",
+        "title": "Welcome / Getting Started",
+        "icon": "$(question)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.showPanel",
+        "title": "Quest",
+        "shortTitle": "Quest",
+        "icon": "$(database)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "title": "Run Query (F5)",
+        "shortTitle": "Run",
+        "icon": "$(rocket)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.cancelQuery",
+        "title": "Cancel Query",
+        "icon": "$(stop-circle)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.newKqlFile",
+        "title": "New KQL Query",
+        "icon": "$(new-file)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.newWiqlFile",
+        "title": "New WIQL Query",
+        "icon": "$(new-file)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.newOqlFile",
+        "title": "New Outlook Query",
+        "icon": "$(new-file)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.newQuery",
+        "title": "New Query",
+        "icon": "$(new-file)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.saveAsPreset",
+        "title": "Save as Favorite",
+        "icon": "$(star-add)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.addDataSource",
+        "title": "Add Data Source",
+        "icon": "$(add)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.showExample",
+        "title": "Show Example Query",
+        "icon": "$(lightbulb)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshClusters",
+        "title": "Refresh Data Sources",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.setActiveCluster",
+        "title": "Set as Active",
+        "icon": "$(check)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.removeCluster",
+        "title": "Remove",
+        "icon": "$(trash)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.renameCluster",
+        "title": "Rename",
+        "icon": "$(edit)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.toggleFavorite",
+        "title": "Toggle Favorite",
+        "icon": "$(star)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.loadPreset",
+        "title": "Load Query",
+        "icon": "$(go-to-file)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.deletePreset",
+        "title": "Delete Favorite",
+        "icon": "$(trash)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.aiChat",
+        "title": "Open AI Chat",
+        "icon": "$(hubot)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.aiExplain",
+        "title": "Explain Query with AI",
+        "icon": "$(lightbulb)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.aiGenerate",
+        "title": "Generate Query with AI",
+        "icon": "$(sparkle)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.exportResults",
+        "title": "Export Results",
+        "icon": "$(export)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshFavorites",
+        "title": "Refresh Favorites",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshHistory",
+        "title": "Refresh History",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.clearHistory",
+        "title": "Clear History",
+        "icon": "$(trash)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.copyClusterInfo",
+        "title": "Copy Connection Info",
+        "icon": "$(copy)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.exportAllClusters",
+        "title": "Export All Data Sources",
+        "icon": "$(export)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.toggleMode",
+        "title": "Toggle Kusto/ADO Mode",
+        "icon": "$(arrow-swap)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.setMode",
+        "title": "Set Query Mode",
+        "icon": "$(settings)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.fetchSchema",
+        "title": "Fetch Schema",
+        "icon": "$(cloud-download)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshSchema",
+        "title": "Refresh Schema for Active Database",
+        "icon": "$(sync)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.clearSchemaCache",
+        "title": "Clear Schema Cache",
+        "icon": "$(trash)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshResultsHistory",
+        "title": "Refresh Results History",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.showKeyboardShortcuts",
+        "title": "Show Keyboard Shortcuts",
+        "icon": "$(keyboard)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.insertSnippet",
+        "title": "Insert Snippet",
+        "icon": "$(insert)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.saveSnippet",
+        "title": "Save Selection as Snippet",
+        "icon": "$(add)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshSnippets",
+        "title": "Refresh Snippets",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.saveConnectionProfile",
+        "title": "Save Current Connection as Profile",
+        "icon": "$(save)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.switchConnectionProfile",
+        "title": "Switch Connection Profile",
+        "icon": "$(plug)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.deleteConnectionProfile",
+        "title": "Delete Connection Profile",
+        "icon": "$(trash)",
+        "category": "Quest"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "queryStudio.runQuery",
+        "key": "F5",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.runQuery",
+        "key": "ctrl+enter",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.cancelQuery",
+        "key": "shift+F5",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.saveAsPreset",
+        "key": "ctrl+shift+s",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.aiChat",
+        "key": "ctrl+shift+a",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.showKeyboardShortcuts",
+        "key": "ctrl+shift+/",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.toggleMode",
+        "key": "ctrl+alt+m",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.switchConnectionProfile",
+        "key": "ctrl+alt+p",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "queryStudio.showPanel",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "navigation@0"
+        },
+        {
+          "command": "queryStudio.runQuery",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "navigation@1"
+        },
+        {
+          "command": "queryStudio.cancelQuery",
+          "when": "(editorLangId == kql || editorLangId == wiql || editorLangId == oql) && queryStudio.isRunning",
+          "group": "navigation@2"
+        },
+        {
+          "command": "queryStudio.aiChat",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "navigation@3"
+        },
+        {
+          "command": "queryStudio.saveAsPreset",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "navigation@4"
+        },
+        {
+          "command": "queryStudio.showExample",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "navigation@5"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "queryStudio.runQuery",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "queryStudio@1"
+        },
+        {
+          "command": "queryStudio.aiChat",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "queryStudio@2"
+        },
+        {
+          "command": "queryStudio.aiExplain",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "queryStudio@3"
+        },
+        {
+          "command": "queryStudio.saveAsPreset",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "queryStudio@4"
+        },
+        {
+          "command": "queryStudio.showExample",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "group": "queryStudio@5"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "queryStudio.newQuery",
+          "when": "view == querystudio.clusters",
+          "group": "navigation@0"
+        },
+        {
+          "command": "queryStudio.toggleMode",
+          "when": "view == querystudio.clusters",
+          "group": "navigation@1"
+        },
+        {
+          "command": "queryStudio.refreshClusters",
+          "when": "view == querystudio.clusters",
+          "group": "navigation@4"
+        },
+        {
+          "command": "queryStudio.addDataSource",
+          "when": "view == querystudio.clusters && !queryStudio.isOutlookMode",
+          "group": "navigation@2"
+        },
+        {
+          "command": "queryStudio.exportAllClusters",
+          "when": "view == querystudio.clusters",
+          "group": "2_export"
+        },
+        {
+          "command": "queryStudio.refreshFavorites",
+          "when": "view == querystudio.presets",
+          "group": "navigation"
+        },
+        {
+          "command": "queryStudio.refreshHistory",
+          "when": "view == querystudio.history",
+          "group": "navigation@1"
+        },
+        {
+          "command": "queryStudio.clearHistory",
+          "when": "view == querystudio.history",
+          "group": "navigation@2"
+        },
+        {
+          "command": "queryStudio.refreshResultsHistory",
+          "when": "view == querystudio.resultsHistory",
+          "group": "navigation"
+        },
+        {
+          "command": "queryStudio.refreshSnippets",
+          "when": "view == querystudio.snippets",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "queryStudio.toggleFavorite",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.copyClusterInfo",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.renameCluster",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "queryStudio.removeCluster",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "queryStudio.fetchSchema",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.renameCluster",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "queryStudio.removeCluster",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "queryStudio.loadPreset",
+          "when": "view == querystudio.presets && viewItem == preset",
+          "group": "inline"
+        },
+        {
+          "command": "queryStudio.deletePreset",
+          "when": "view == querystudio.presets && viewItem == preset",
+          "group": "2_modify"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Quest",
+      "properties": {
+        "queryStudio.defaultCluster": {
+          "type": "string",
+          "default": "",
+          "description": "Default Kusto cluster URL"
+        },
+        "queryStudio.defaultDatabase": {
+          "type": "string",
+          "default": "",
+          "description": "Default database name"
+        },
+        "queryStudio.queryTimeout": {
+          "type": "number",
+          "default": 300,
+          "description": "Query timeout in seconds"
+        },
+        "queryStudio.maxResults": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of rows to return"
+        },
+        "queryStudio.autoSaveHistory": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically save executed queries to history"
+        },
+        "queryStudio.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI features"
+        },
+        "queryStudio.ai.provider": {
+          "type": "string",
+          "enum": [
+            "github",
+            "azure",
+            "copilot"
+          ],
+          "default": "github",
+          "description": "AI provider to use"
+        },
+        "queryStudio.ai.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "AI model to use"
+        },
+        "queryStudio.sidecar.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to sidecar executable (leave empty for bundled)"
+        },
+        "queryStudio.history.retentionDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "description": "Number of days to keep query history"
+        },
+        "queryStudio.history.maxItems": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Maximum number of history items to keep"
+        },
+        "queryStudio.resultsHistory.retentionDays": {
+          "type": "number",
+          "default": 14,
+          "minimum": 1,
+          "maximum": 60,
+          "description": "Number of days to keep results history"
+        },
+        "queryStudio.resultsHistory.maxItems": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 200,
+          "description": "Maximum number of result items to keep"
+        },
+        "queryStudio.resultsHistory.maxSampleRows": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Number of sample rows to store for each result (for preview)"
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "queryStudio.welcome",
+        "title": "Get Started with Quest",
+        "description": "Learn how to query Azure Data Explorer, Azure DevOps, and Outlook with AI assistance.",
+        "steps": [
+          {
+            "id": "welcome",
+            "title": "Welcome to Quest",
+            "description": "Quest lets you query multiple data sources using familiar KQL-like syntax.\n\n**Supported data sources:**\n- **Kusto (KQL)** - Azure Data Explorer\n- **ADO (WIQL)** - Azure DevOps Work Items\n- **Outlook (OQL)** - Emails, Calendar, Contacts\n\n[Open Quest](command:workbench.view.extension.queryStudio)",
+            "media": {
+              "markdown": "resources/walkthrough/welcome.md"
+            }
+          },
+          {
+            "id": "chooseMode",
+            "title": "Choose Your Query Mode",
+            "description": "Switch between query modes using the mode selector in the status bar or sidebar.\n\n**KQL Mode** - Query Azure Data Explorer clusters\n**ADO Mode** - Query Azure DevOps work items\n**Outlook Mode** - Query your local Outlook data\n\n[Toggle Mode](command:queryStudio.toggleMode)",
+            "media": {
+              "markdown": "resources/walkthrough/choose-mode.md"
+            }
+          },
+          {
+            "id": "addDataSource",
+            "title": "Add a Data Source",
+            "description": "For Kusto and ADO modes, add your data sources to get started.\n\n**Kusto:** Add your cluster URL (e.g., `https://help.kusto.windows.net`)\n**ADO:** Add your organization URL (e.g., `https://dev.azure.com/myorg`)\n**Outlook:** No setup needed - uses your local Outlook!\n\n[Add Data Source](command:queryStudio.addDataSource)",
+            "media": {
+              "markdown": "resources/walkthrough/add-datasource.md"
+            },
+            "when": "!queryStudio.isOutlookMode"
+          },
+          {
+            "id": "createQuery",
+            "title": "Create Your First Query",
+            "description": "Create a new query file and start writing queries.\n\n**KQL Example:**\n```\nStormEvents\n| where State == \"FLORIDA\"\n| take 10\n```\n\n**OQL Example:**\n```\nInbox\n| where Subject contains \"meeting\"\n| take 50\n```\n\n[New KQL Query](command:queryStudio.newKqlFile)\n[New Outlook Query](command:queryStudio.newOqlFile)",
+            "media": {
+              "markdown": "resources/walkthrough/create-query.md"
+            }
+          },
+          {
+            "id": "runQuery",
+            "title": "Run Your Query",
+            "description": "Execute your query and see results instantly.\n\n**Keyboard shortcuts:**\n- **F5** or **Ctrl+Enter** - Run query\n- **Shift+F5** - Cancel query\n\nResults appear in the bottom panel with full export options.\n\n[Run Query](command:queryStudio.runQuery)",
+            "media": {
+              "markdown": "resources/walkthrough/run-query.md"
+            }
+          },
+          {
+            "id": "aiAssistant",
+            "title": "Use AI Assistant",
+            "description": "Get AI-powered help with your queries!\n\n**Quick actions:**\n- **Fix** - Fix syntax errors\n- **Improve** - Optimize your query\n- **Explain** - Understand what a query does\n\nThe AI understands your favorites and recent queries for context-aware suggestions.\n\n[Open AI Chat](command:queryStudio.aiChat)",
+            "media": {
+              "markdown": "resources/walkthrough/ai-assistant.md"
+            }
+          },
+          {
+            "id": "saveFavorites",
+            "title": "Save Favorites & Snippets",
+            "description": "Save your best queries for quick access.\n\n**Favorites** - Save complete queries with names\n**Snippets** - Save reusable query fragments\n**History** - Your recent queries are auto-saved\n\nUse **Ctrl+Shift+S** to save the current query.\n\n[Save as Favorite](command:queryStudio.saveAsPreset)",
+            "media": {
+              "markdown": "resources/walkthrough/favorites.md"
+            }
+          },
+          {
+            "id": "shortcuts",
+            "title": "Keyboard Shortcuts",
+            "description": "Master Quest with these shortcuts:\n\n| Shortcut | Action |\n|----------|--------|\n| **F5** | Run Query |\n| **Ctrl+Enter** | Run Query |\n| **Shift+F5** | Cancel Query |\n| **Ctrl+Shift+S** | Save as Favorite |\n| **Ctrl+Shift+A** | Open AI Chat |\n| **Ctrl+Alt+M** | Toggle Mode |\n| **Ctrl+Shift+/** | Show All Shortcuts |\n\n[Show All Shortcuts](command:queryStudio.showKeyboardShortcuts)",
+            "media": {
+              "markdown": "resources/walkthrough/shortcuts.md"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.54.0",
+    "mocha": "^11.7.5",
+    "sharp": "^0.34.5",
+    "typescript": "^5.3.0"
+  }
+}

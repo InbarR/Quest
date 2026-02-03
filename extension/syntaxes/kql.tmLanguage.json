@@ -1,0 +1,191 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "KQL",
+  "scopeName": "source.kql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#keywords" },
+    { "include": "#functions" },
+    { "include": "#aggregations" },
+    { "include": "#types" },
+    { "include": "#variables" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.kql",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.kql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.kql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.kql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.kql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.triple.kql",
+          "begin": "```",
+          "end": "```"
+        },
+        {
+          "name": "string.quoted.verbatim.kql",
+          "begin": "@\"",
+          "end": "\""
+        },
+        {
+          "name": "string.quoted.verbatim.single.kql",
+          "begin": "@'",
+          "end": "'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.kql",
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.kql",
+          "match": "\\b\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.hex.kql",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.control.pipe.kql",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.comparison.kql",
+          "match": "==|!=|<>|<=|>=|<|>|=~|!~"
+        },
+        {
+          "name": "keyword.operator.assignment.kql",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.arithmetic.kql",
+          "match": "\\+|-|\\*|/|%"
+        },
+        {
+          "name": "keyword.operator.logical.kql",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "keyword.operator.string.kql",
+          "match": "\\b(contains|!contains|contains_cs|has|!has|has_cs|hasprefix|hassuffix|startswith|!startswith|startswith_cs|endswith|!endswith|endswith_cs|matches\\s+regex|in|!in|in~|!in~|has_any|has_all)\\b"
+        },
+        {
+          "name": "keyword.operator.range.kql",
+          "match": "\\.\\."
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.kql",
+          "match": "\\b(let|set|alias|declare|pattern|restrict|access|query_parameters|where|project|project-away|project-keep|project-rename|project-reorder|extend|summarize|sort|order|top|take|limit|join|union|lookup|mv-expand|mv-apply|parse|parse-where|parse-kv|split|evaluate|distinct|render|as|on|kind|with|of|by|asc|desc|nulls|first|last|inner|outer|left|right|anti|semi|fullouter|leftanti|rightanti|leftsemi|rightsemi|innerunique|leftouter|rightouter|print|datatable|externaldata|find|search|fork|facet|sample|sample-distinct|scan|serialize|range|invoke|getschema|materialize|toscalar|consume)\\b"
+        },
+        {
+          "name": "constant.language.kql",
+          "match": "\\b(true|false|null|int|long|real|double|string|bool|boolean|datetime|date|time|timespan|guid|dynamic|decimal)\\b"
+        },
+        {
+          "name": "entity.name.tag.kql",
+          "match": "\\b(cluster|database|table|external_table|materialized_view|stored_query_result)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.datetime.kql",
+          "match": "\\b(now|ago|datetime|todatetime|datetime_add|datetime_diff|datetime_part|dayofmonth|dayofweek|dayofyear|endofday|endofmonth|endofweek|endofyear|format_datetime|format_timespan|getmonth|getyear|hourofday|make_datetime|make_timespan|monthofyear|startofday|startofmonth|startofweek|startofyear|todatetime|totimespan|unixtime_microseconds_todatetime|unixtime_milliseconds_todatetime|unixtime_nanoseconds_todatetime|unixtime_seconds_todatetime|weekofyear)\\b"
+        },
+        {
+          "name": "support.function.string.kql",
+          "match": "\\b(base64_decode_toarray|base64_decode_tostring|base64_encode_fromarray|base64_encode_tostring|countof|extract|extract_all|extract_json|has_any_index|indexof|isempty|isnotempty|isnotnull|isnull|parse_csv|parse_ipv4|parse_ipv6|parse_json|parse_path|parse_url|parse_urlquery|parse_user_agent|parse_version|parse_xml|replace|replace_regex|reverse|split|strcat|strcat_array|strcat_delim|strcmp|strlen|strrep|substring|tolower|toupper|translate|trim|trim_end|trim_start|url_decode|url_encode)\\b"
+        },
+        {
+          "name": "support.function.conversion.kql",
+          "match": "\\b(tobool|todatetime|todouble|toguid|tohex|toint|tolong|toreal|tostring|totimespan|toboolean|todecimal|todynamic|type)\\b"
+        },
+        {
+          "name": "support.function.array.kql",
+          "match": "\\b(array_concat|array_iif|array_index_of|array_length|array_reverse|array_rotate_left|array_rotate_right|array_shift_left|array_shift_right|array_slice|array_sort_asc|array_sort_desc|array_split|array_sum|bag_keys|bag_merge|bag_pack|bag_remove_keys|bag_set_key|jaccard_index|pack|pack_all|pack_array|repeat|set_difference|set_has_element|set_intersect|set_union|treepath|zip)\\b"
+        },
+        {
+          "name": "support.function.math.kql",
+          "match": "\\b(abs|acos|asin|atan|atan2|beta_cdf|beta_inv|beta_pdf|bin|bin_at|bin_auto|ceiling|cos|cot|degrees|exp|exp10|exp2|floor|gamma|hash|hash_combine|hash_many|hash_md5|hash_sha1|hash_sha256|hash_xxhash64|isfinite|isinf|isnan|log|log10|log2|loggamma|not|pi|pow|power|radians|rand|range|round|sign|sin|sqrt|tan|welch_test)\\b"
+        },
+        {
+          "name": "support.function.conditional.kql",
+          "match": "\\b(case|coalesce|iff|iif|max_of|min_of)\\b"
+        },
+        {
+          "name": "support.function.special.kql",
+          "match": "\\b(activity_counts_metrics|activity_engagement|activity_metrics|basket|cursor_after|cursor_before_or_at|cursor_current|dcount_hll|estimate_data_size|geo_distance_2points|geo_distance_point_to_line|geo_distance_point_to_polygon|geo_intersects_2lines|geo_intersects_2polygons|geo_intersects_line_with_polygon|geo_intersection_2lines|geo_intersection_2polygons|geo_intersection_line_with_polygon|geo_line_buffer|geo_line_length|geo_polygon_area|geo_polygon_buffer|geo_polygon_centroid|geo_polygon_perimeter|geo_point_in_circle|geo_point_in_polygon|geo_point_to_geohash|geo_point_to_h3cell|geo_point_to_s2cell|geohash_to_central_point|h3cell_to_central_point|hll|hll_merge|new_activity_metrics|percentile_tdigest|percentiles_array_tdigest|row_cumsum|row_number|row_rank|row_window_session|series_add|series_decompose|series_decompose_anomalies|series_decompose_forecast|series_divide|series_equals|series_fill_backward|series_fill_const|series_fill_forward|series_fill_linear|series_fft|series_fir|series_fit_2lines|series_fit_line|series_fit_line_dynamic|series_fit_poly|series_greater|series_greater_equals|series_ifft|series_iir|series_less|series_less_equals|series_multiply|series_not_equals|series_outliers|series_pearson_correlation|series_periods_detect|series_periods_validate|series_seasonal|series_stats|series_stats_dynamic|series_subtract|sliding_window_counts|tdigest|tdigest_merge)\\b"
+        },
+        {
+          "name": "support.function.window.kql",
+          "match": "\\b(next|prev|row_cumsum|row_number|row_rank)\\b"
+        }
+      ]
+    },
+    "aggregations": {
+      "patterns": [
+        {
+          "name": "support.function.aggregate.kql",
+          "match": "\\b(any|anyif|arg_max|arg_min|avg|avgif|binary_all_and|binary_all_or|binary_all_xor|buildschema|count|countif|dcount|dcountif|hll|hll_merge|make_bag|make_bag_if|make_list|make_list_if|make_list_with_nulls|make_set|make_set_if|max|maxif|min|minif|percentile|percentilew|percentiles|percentiles_array|stdev|stdevif|stdevp|sum|sumif|take_any|take_anyif|tdigest|tdigest_merge|variance|varianceif|variancep)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.kql",
+          "match": "\\b(bool|boolean|datetime|date|dynamic|guid|int|long|real|double|string|timespan|time|decimal)\\b"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.parameter.kql",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\s*(?==)"
+        }
+      ]
+    }
+  }
+}

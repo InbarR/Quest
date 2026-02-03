@@ -1,0 +1,112 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "WIQL",
+  "scopeName": "source.wiql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#fields" },
+    { "include": "#macros" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.wiql",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.line.double-slash.wiql",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.wiql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.wiql",
+              "match": "''"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.wiql",
+          "begin": "\"",
+          "end": "\""
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.wiql",
+          "match": "\\b\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.wiql",
+          "match": "\\b(?i)(SELECT|FROM|WHERE|ORDER\\s+BY|GROUP\\s+BY|ASOF|MODE)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.wiql",
+          "match": "\\b(?i)(AND|OR|NOT|IN|EVER|UNDER)\\b"
+        },
+        {
+          "name": "keyword.operator.comparison.wiql",
+          "match": "\\b(?i)(CONTAINS|DOES\\s+NOT\\s+CONTAIN|CONTAINS\\s+WORDS|UNDER)\\b"
+        },
+        {
+          "name": "keyword.other.wiql",
+          "match": "\\b(?i)(ASC|DESC|WorkItems|WorkItemLinks|Source|Target)\\b"
+        },
+        {
+          "name": "constant.language.wiql",
+          "match": "\\b(?i)(TRUE|FALSE|NULL)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.wiql",
+          "match": "=|<>|!=|<|>|<=|>="
+        }
+      ]
+    },
+    "fields": {
+      "patterns": [
+        {
+          "name": "variable.other.field.wiql",
+          "match": "\\[([^\\]]+)\\]"
+        },
+        {
+          "name": "entity.name.type.field.wiql",
+          "match": "\\b(System\\.[A-Za-z]+|Microsoft\\.[A-Za-z\\.]+)\\b"
+        }
+      ]
+    },
+    "macros": {
+      "patterns": [
+        {
+          "name": "variable.other.macro.wiql",
+          "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        {
+          "name": "constant.language.macro.wiql",
+          "match": "@(Me|Today|Project|TeamProject|CurrentIteration|RecentProjectActivity|MyRecentActivity|FollowedWorkItems)"
+        }
+      ]
+    }
+  }
+}

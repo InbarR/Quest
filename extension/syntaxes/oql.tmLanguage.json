@@ -1,0 +1,159 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "OQL",
+  "scopeName": "source.oql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#operators" },
+    { "include": "#keywords" },
+    { "include": "#folders" },
+    { "include": "#fields" },
+    { "include": "#davSchemas" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.oql",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.line.double-dash.oql",
+          "match": "--.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.oql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.oql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.oql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.oql",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.oql",
+          "match": "\\b\\d+\\.\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.oql",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.control.pipe.oql",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.comparison.oql",
+          "match": "<=|>=|<>|!=|<|>|="
+        },
+        {
+          "name": "keyword.operator.logical.oql",
+          "match": "\\b(AND|OR|NOT|and|or|not)\\b"
+        },
+        {
+          "name": "keyword.operator.like.oql",
+          "match": "\\b(LIKE|like|IN|in|BETWEEN|between|IS|is)\\b"
+        },
+        {
+          "name": "keyword.operator.wildcard.oql",
+          "match": "%"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.oql",
+          "match": "\\b(SELECT|FROM|WHERE|ORDER|BY|ASC|DESC|TOP|LIMIT|select|from|where|order|by|asc|desc|top|limit)\\b"
+        },
+        {
+          "name": "constant.language.oql",
+          "match": "\\b(true|false|TRUE|FALSE|null|NULL|Yes|No)\\b"
+        }
+      ]
+    },
+    "folders": {
+      "patterns": [
+        {
+          "name": "entity.name.tag.folder.oql",
+          "match": "\\b(Inbox|SentMail|Sent|SentItems|Drafts|DeletedItems|Trash|Deleted|Calendar|Contacts|Tasks|Notes|Journal|Outbox|Junk|JunkMail|Spam)\\b"
+        }
+      ]
+    },
+    "fields": {
+      "patterns": [
+        {
+          "name": "support.variable.mail.oql",
+          "match": "\\b(Subject|From|To|Cc|Bcc|Body|ReceivedTime|SentOn|Sender|Attachments|Importance|UnRead|HasAttachments)\\b"
+        },
+        {
+          "name": "support.variable.calendar.oql",
+          "match": "\\b(Start|End|Location|Organizer|Duration|AllDayEvent|IsRecurring|BusyStatus|ReminderSet|Categories)\\b"
+        },
+        {
+          "name": "support.variable.contact.oql",
+          "match": "\\b(FullName|FirstName|LastName|Email1Address|Email2Address|Email3Address|CompanyName|BusinessPhone|MobilePhone|HomePhone|JobTitle|Department|MailingAddress)\\b"
+        },
+        {
+          "name": "support.variable.task.oql",
+          "match": "\\b(DueDate|StartDate|Status|PercentComplete|Owner|TotalWork|ActualWork|Complete)\\b"
+        },
+        {
+          "name": "support.variable.shorthand.oql",
+          "match": "\\b(subject|from|to|cc|received|sent|read|hasattachment|importance|start|end|location)\\b"
+        }
+      ]
+    },
+    "davSchemas": {
+      "patterns": [
+        {
+          "name": "constant.other.dav-schema.mailheader.oql",
+          "match": "urn:schemas:mailheader:(subject|from|to|cc|bcc|date|message-id|reply-to|sender|content-type)"
+        },
+        {
+          "name": "constant.other.dav-schema.httpmail.oql",
+          "match": "urn:schemas:httpmail:(datereceived|datesent|read|hasattachment|importance|priority|textdescription|htmldescription|fromname|fromemail)"
+        },
+        {
+          "name": "constant.other.dav-schema.calendar.oql",
+          "match": "urn:schemas:calendar:(dtstart|dtend|location|duration|busystatus|alldayevent|isrecurring|organizer|attendee|rrule)"
+        },
+        {
+          "name": "constant.other.dav-schema.contacts.oql",
+          "match": "urn:schemas:contacts:(cn|email1|email2|email3|o|department|title|telephonenumber|mobile|homePhone)"
+        },
+        {
+          "name": "constant.other.dav-schema.generic.oql",
+          "match": "urn:schemas:[a-zA-Z]+:[a-zA-Z0-9_-]+"
+        }
+      ]
+    }
+  }
+}
