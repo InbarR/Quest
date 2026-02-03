@@ -429,6 +429,36 @@
         "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
       },
       {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && editorLangId == kql"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && editorLangId == wiql"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && editorLangId == oql"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && resourceExtname == .kql"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && resourceExtname == .wiql"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "-editor.action.insertLineAfter",
+        "when": "editorTextFocus && resourceExtname == .oql"
+      },
+      {
         "command": "queryStudio.runQuery",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
