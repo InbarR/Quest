@@ -563,7 +563,11 @@ public class SimpleJsonRpcServer
                     clusterUrl = connStr.Split(';')[0];
                 }
 
-                if (!string.IsNullOrEmpty(clusterUrl))
+                // Only add if we have a valid cluster URL (must be a kusto URL)
+                if (!string.IsNullOrEmpty(clusterUrl) &&
+                    (clusterUrl.Contains("kusto.windows.net") ||
+                     clusterUrl.Contains("kusto.azure") ||
+                     clusterUrl.Contains("kusto.data")))
                 {
                     // Extract name from cluster URL
                     try
@@ -576,14 +580,14 @@ public class SimpleJsonRpcServer
                         name = clusterUrl;
                     }
 
-                    // Avoid duplicates
+                    // Avoid duplicates - match by cluster URL only (database may vary)
                     if (!connections.Any(c => c.ClusterUrl.Equals(clusterUrl, StringComparison.OrdinalIgnoreCase) &&
                                               c.Database == database))
                     {
                         connections.Add(new KustoExplorerConnection(
                             Name: name ?? "Unknown",
                             ClusterUrl: clusterUrl,
-                            Database: database
+                            Database: database  // May be null - client will handle
                         ));
                     }
                 }

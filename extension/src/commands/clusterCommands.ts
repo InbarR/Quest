@@ -844,14 +844,32 @@ async function importFromKustoExplorer(
 
         // Import selected connections
         let imported = 0;
+        let skipped = 0;
         for (const item of selected) {
             const conn = item.connection;
             try {
+                let database = conn.database;
+
+                // If no database specified, ask user to enter one
+                if (!database) {
+                    database = await vscode.window.showInputBox({
+                        prompt: `Enter database name for ${conn.name} (${conn.clusterUrl})`,
+                        placeHolder: 'e.g., SampleDB',
+                        title: 'Database Required'
+                    });
+
+                    if (!database) {
+                        // User cancelled - skip this connection
+                        skipped++;
+                        continue;
+                    }
+                }
+
                 const cluster: ClusterInfo = {
                     id: Date.now().toString() + '_' + imported,
                     name: conn.name,
                     url: normalizeKustoUrl(conn.clusterUrl),
-                    database: conn.database || 'default',
+                    database: database,
                     type: 'kusto',
                     isFavorite: false
                 };
@@ -863,7 +881,8 @@ async function importFromKustoExplorer(
         }
 
         clusterProvider.refresh();
-        vscode.window.showInformationMessage(`Imported ${imported} connections from Kusto Explorer`);
+        const skippedMsg = skipped > 0 ? ` (${skipped} skipped)` : '';
+        vscode.window.showInformationMessage(`Imported ${imported} connections from Kusto Explorer${skippedMsg}`);
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         vscode.window.showErrorMessage(`Import failed: ${message}`);
