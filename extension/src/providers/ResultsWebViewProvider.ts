@@ -2450,18 +2450,67 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
         function showFilterHelp() {
             const helpHtml = \`
-                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="this.remove()">
-                    <div style="background:var(--vscode-editor-background);border:1px solid var(--vscode-widget-border);border-radius:8px;padding:20px;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
-                        <h3 style="margin:0 0 15px 0;color:var(--vscode-foreground);">🔍 Filter Syntax</h3>
-                        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">text</td><td style="padding:6px 0;">Search all columns</td></tr>
-                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">col::value</td><td style="padding:6px 0;">Filter specific column</td></tr>
-                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">::col</td><td style="padding:6px 0;">Highlight column</td></tr>
-                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">!pattern</td><td style="padding:6px 0;">Exclude matches</td></tr>
-                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">a.*b</td><td style="padding:6px 0;">Regex supported</td></tr>
-                        </table>
-                        <div style="margin-top:15px;text-align:right;">
-                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding:6px 16px;cursor:pointer;">Got it</button>
+                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="this.remove()">
+                    <div style="background:var(--vscode-editor-background);border:1px solid var(--vscode-widget-border);border-radius:10px;padding:24px 32px;max-width:650px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.4);" onclick="event.stopPropagation()">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                            <h2 style="margin:0;color:var(--vscode-foreground);font-size:18px;">🔍 Filter Syntax Guide</h2>
+                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--vscode-foreground);padding:4px 8px;">✕</button>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <h3 style="margin:0 0 10px 0;color:var(--vscode-textLink-foreground);font-size:14px;border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;">Basic Search</h3>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;width:40%;">error</td><td style="padding:8px 0;">Find "error" in any column</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">timeout</td><td style="padding:8px 0;">Find "timeout" in any column</td></tr>
+                            </table>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <h3 style="margin:0 0 10px 0;color:var(--vscode-textLink-foreground);font-size:14px;border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;">Column-Specific Filter</h3>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;width:40%;">Status::Active</td><td style="padding:8px 0;">Filter where Status contains "Active"</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">State::Closed</td><td style="padding:8px 0;">Filter where State contains "Closed"</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">Title::bug fix</td><td style="padding:8px 0;">Filter where Title contains "bug fix"</td></tr>
+                            </table>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <h3 style="margin:0 0 10px 0;color:var(--vscode-textLink-foreground);font-size:14px;border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;">Highlight Column</h3>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;width:40%;">::Status</td><td style="padding:8px 0;">Highlight the Status column</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">::Title</td><td style="padding:8px 0;">Highlight the Title column</td></tr>
+                            </table>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <h3 style="margin:0 0 10px 0;color:var(--vscode-textLink-foreground);font-size:14px;border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;">Exclude (Negative Filter)</h3>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;width:40%;">!error</td><td style="padding:8px 0;">Exclude rows containing "error"</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">!Status::Closed</td><td style="padding:8px 0;">Exclude rows where Status is "Closed"</td></tr>
+                            </table>
+                        </div>
+
+                        <div style="margin-bottom:20px;">
+                            <h3 style="margin:0 0 10px 0;color:var(--vscode-textLink-foreground);font-size:14px;border-bottom:1px solid var(--vscode-widget-border);padding-bottom:6px;">Regex Patterns</h3>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;width:40%;">^Error</td><td style="padding:8px 0;">Starts with "Error"</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">complete$</td><td style="padding:8px 0;">Ends with "complete"</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">v[0-9]+\\\\.[0-9]+</td><td style="padding:8px 0;">Match version numbers (v1.0, v2.5)</td></tr>
+                                <tr><td style="padding:8px 15px 8px 0;color:var(--vscode-textPreformat-foreground);font-family:monospace;background:var(--vscode-textBlockQuote-background);border-radius:4px;">error|warning</td><td style="padding:8px 0;">Match "error" OR "warning"</td></tr>
+                            </table>
+                        </div>
+
+                        <div style="background:var(--vscode-textBlockQuote-background);padding:12px 16px;border-radius:6px;margin-top:16px;">
+                            <div style="font-size:12px;color:var(--vscode-descriptionForeground);">
+                                <strong>💡 Tips:</strong><br>
+                                • Press <kbd style="background:var(--vscode-button-background);padding:2px 6px;border-radius:3px;font-size:11px;">F12</kbd> to focus the filter input<br>
+                                • Use the 🔽/🖌️ button to toggle between Filter and Highlight modes<br>
+                                • Click "🔎 All" to search across all result tabs
+                            </div>
+                        </div>
+
+                        <div style="margin-top:20px;text-align:right;">
+                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding:8px 24px;cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;border-radius:4px;font-size:13px;">Got it</button>
                         </div>
                     </div>
                 </div>
