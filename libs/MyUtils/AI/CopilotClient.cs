@@ -57,6 +57,10 @@ namespace MyUtils.AI
         private readonly string _vsCodeVersion;
         private const string CredentialTarget = "MyKusto_GitHub_Copilot_Token";
 
+        // Track pending device code so retry works regardless of caller session
+        private DeviceCodeResponse _pendingDeviceCode;
+        private DateTime _pendingDeviceCodeExpiry;
+
         // GitHub API constants
         private const string GITHUB_BASE_URL = "https://github.com";
         private const string GITHUB_API_BASE_URL = "https://api.github.com";
@@ -99,11 +103,7 @@ namespace MyUtils.AI
                 response.EnsureSuccessStatusCode();
 
                 var responseText = await response.Content.ReadAsStringAsync();
-                _log($"Device code response: {responseText}", false);
-
                 var deviceCode = JsonSerializer.Deserialize<DeviceCodeResponse>(responseText);
-
-                _log($"Please visit {deviceCode.verification_uri} and enter code: {deviceCode.user_code}", false);
                 
                 return deviceCode;
             }
@@ -149,13 +149,10 @@ namespace MyUtils.AI
                                     if (error == "authorization_pending")
                                     {
                                         // User hasn't authorized yet, continue polling
-                                        _log("Waiting for user authorization...", false);
                                     }
                                     else if (error == "slow_down")
                                     {
-                                        // Increase polling interval
                                         sleepDuration = sleepDuration.Add(TimeSpan.FromSeconds(5));
-                                        _log("Slowing down polling rate...", false);
                                     }
                                     else
                                     {
@@ -166,7 +163,7 @@ namespace MyUtils.AI
                                 else if (doc.RootElement.TryGetProperty("access_token", out var tokenProp))
                                 {
                                     _githubToken = tokenProp.GetString();
-                                    _log("GitHub token obtained successfully", false);
+                                    SaveToken(_githubToken);
                                     return _githubToken;
                                 }
                             }
@@ -254,126 +251,137 @@ namespace MyUtils.AI
         }
 
         /// <summary>
-        /// Sets the GitHub token directly (useful for bypassing interactive auth).
+        /// Sets the GitHub token directly (from VS Code authentication).
+        /// Also saves to credential store for persistence across server restarts.
         /// </summary>
         public void SetGitHubToken(string token)
         {
             _githubToken = token;
+            SaveToken(token);
         }
 
         /// <summary>
-        /// Ensures GitHub token is available, either by loading from storage or initiating device code auth.
-        /// If no callback is provided and auth is needed, throws DeviceCodeAuthRequiredException.
+        /// Gets the current GitHub token if available.
+        /// </summary>
+        public string GetGitHubToken()
+        {
+            return _githubToken;
+        }
+
+        /// <summary>
+        /// Ensures GitHub token is available. The token should be set by the extension
+        /// via SetGitHubToken() using VS Code's built-in GitHub authentication.
+        /// Falls back to credential store, then throws if no token is available.
         /// </summary>
         public async Task<string> EnsureGitHubTokenAsync(CancellationToken ct = default)
         {
-            // First check if token is already set
             if (!string.IsNullOrEmpty(_githubToken))
             {
                 return _githubToken;
             }
 
-            // Try to load token from storage
+            // Fallback: check credential store (for tokens from previous sessions)
             var storedToken = LoadStoredToken();
             if (!string.IsNullOrEmpty(storedToken))
             {
                 _githubToken = storedToken;
-                _log("GitHub token loaded from storage", false);
+                _log("Token loaded from credential store", false);
                 return _githubToken;
             }
 
-            // No stored token found, initiate device code authentication
-            _log("No stored GitHub token found. Starting device code authentication...", false);
-            var deviceCode = await StartAuthenticationAsync(ct);
-
-            // If no callback, throw exception so caller can handle UI
-            if (_deviceCodeCallback == null)
-            {
-                _log($"Device code auth required: {deviceCode.verification_uri} code: {deviceCode.user_code}", false);
-                throw new DeviceCodeAuthRequiredException(
-                    deviceCode.user_code,
-                    deviceCode.verification_uri,
-                    deviceCode.device_code,
-                    deviceCode.expires_in,
-                    deviceCode.interval
-                );
-            }
-
-            // Show the device code dialog if callback is provided
-            object dialogInstance = await _deviceCodeCallback(deviceCode.user_code, deviceCode.verification_uri);
-
-            var token = await PollForAccessTokenAsync(deviceCode, ct);
-
-            // Close the dialog if it's available and has CompleteAuthentication method
-            if (dialogInstance != null)
-            {
-                try
-                {
-                    var completeMethod = dialogInstance.GetType().GetMethod("CompleteAuthentication");
-                    completeMethod?.Invoke(dialogInstance, null);
-                }
-                catch (Exception ex)
-                {
-                    _log($"Could not close device code dialog: {ex.Message}", false);
-                }
-            }
-            
-            // Save the token for future use
-            SaveToken(token);
-            
-            return token;
+            // No token available - tell extension to authenticate via VS Code
+            _log("No GitHub token available, auth required", false);
+            throw new DeviceCodeAuthRequiredException("", "https://github.com/login/device", "", 0, 0);
         }
 
         /// <summary>
-        /// Saves the GitHub token to Windows Credential Manager.
+        /// Tries a single poll to check if the user has completed device code authorization.
+        /// Returns the token if authorized, null if still pending.
         /// </summary>
+        private async Task<string> TryPollOnceAsync(DeviceCodeResponse deviceCode, CancellationToken ct)
+        {
+            var formData = new Dictionary<string, string>
+            {
+                { "client_id", GITHUB_CLIENT_ID },
+                { "device_code", deviceCode.device_code },
+                { "grant_type", "urn:ietf:params:oauth:grant-type:device_code" }
+            };
+
+            var content = new FormUrlEncodedContent(formData);
+
+            using (var request = new HttpRequestMessage(HttpMethod.Post, $"{GITHUB_BASE_URL}/login/oauth/access_token"))
+            {
+                request.Content = content;
+                request.Headers.Add("Accept", "application/json");
+
+                var response = await _httpClient.SendAsync(request, ct);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseText = await response.Content.ReadAsStringAsync();
+                    using (var doc = JsonDocument.Parse(responseText))
+                    {
+                        if (doc.RootElement.TryGetProperty("access_token", out var tokenProp))
+                        {
+                            return tokenProp.GetString();
+                        }
+                        // authorization_pending or other status - return null
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private void SaveToken(string token)
         {
             try
             {
-                CredentialManager.WriteCredential(CredentialTarget, "GitHubToken", token);
-                _log($"Token saved successfully to Windows Credential Manager", false);
-            }
-            catch (Exception ex)
-            {
-                _log($"Failed to save token to Credential Manager: {ex.Message}", true);
-            }
-        }
-
-        /// <summary>
-        /// Loads the GitHub token from Windows Credential Manager if it exists.
-        /// </summary>
-        private string LoadStoredToken()
-        {
-            try
-            {
-                var credential = CredentialManager.ReadCredential(CredentialTarget);
-                if (credential != null && !string.IsNullOrWhiteSpace(credential.Password) && credential.Password.Length >= 20)
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    return credential.Password;
+                    CredentialManager.WriteCredential(CredentialTarget, "github", token);
+                    _log("Token cached to credential store", false);
                 }
             }
             catch (Exception ex)
             {
-                _log($"Failed to load stored token from Credential Manager: {ex.Message}", false);
+                _log($"Failed to cache token: {ex.Message}", true);
             }
-            
-            return null;
         }
 
-        /// <summary>
-        /// Clears the stored GitHub token from Windows Credential Manager.
-        /// </summary>
-        public void ClearStoredToken()
+        private string LoadStoredToken()
         {
             try
             {
-                CredentialManager.DeleteCredential(CredentialTarget);
-                _log("Stored token cleared from Windows Credential Manager", false);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    var cred = CredentialManager.ReadCredential(CredentialTarget);
+                    if (cred != null && !string.IsNullOrEmpty(cred.Password) && cred.Password.Length >= 20)
+                        return cred.Password;
+                }
             }
             catch (Exception ex)
             {
-                _log($"Failed to clear stored token from Credential Manager: {ex.Message}", true);
+                _log($"Failed to load token from credential store: {ex.Message}", false);
+            }
+            return null;
+        }
+
+        public void ClearStoredToken()
+        {
+            _githubToken = null;
+            _copilotToken = null;
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    CredentialManager.DeleteCredential(CredentialTarget);
+                }
+                _log("Stored token cleared", false);
+            }
+            catch (Exception ex)
+            {
+                _log($"Failed to clear stored token: {ex.Message}", true);
             }
         }
 
@@ -627,7 +635,8 @@ namespace MyUtils.AI
 
         private void AddCopilotHeaders(HttpRequestMessage request, bool vision = false)
         {
-            request.Headers.Add("Authorization", $"Bearer {_copilotToken.Token}");
+            // Use TryAddWithoutValidation because Copilot tokens contain semicolons which HttpClient rejects
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_copilotToken.Token}");
             request.Headers.Add("copilot-integration-id", "vscode-chat");
             request.Headers.Add("editor-version", $"vscode/{_vsCodeVersion}");
             request.Headers.Add("editor-plugin-version", $"copilot-chat/{COPILOT_VERSION}");

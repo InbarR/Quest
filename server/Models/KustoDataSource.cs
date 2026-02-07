@@ -138,8 +138,7 @@ public class KustoDataSource : IDataSource, ISchemaProvider, IDataSourceHelp, IE
 
             _log($"Executing Kusto query on {clusterUrl}/{database}");
 
-            var kcsb = new KustoConnectionStringBuilder(clusterUrl, database)
-                .WithAadUserPromptAuthentication();
+            var kcsb = KustoAuthProvider.CreateKcsb(clusterUrl, database);
 
             var result = await _kustoService.RunQueryAsync(kcsb, request.Query, ct, _log);
 

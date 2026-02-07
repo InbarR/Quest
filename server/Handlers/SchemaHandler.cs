@@ -8,6 +8,7 @@ public class SchemaHandler
     private readonly KustoSchemaManager _schemaManager;
     private readonly KustoService _kustoService;
     private readonly Action<string>? _log;
+    private Kusto.Data.KustoConnectionStringBuilder? _lastKcsb;
 
     public SchemaHandler(KustoSchemaManager schemaManager, KustoService? kustoService = null, Action<string>? log = null)
     {
@@ -28,7 +29,6 @@ public class SchemaHandler
                 if (cached != null)
                 {
                     _log?.Invoke($"Using cached schema for {clusterUrl}/{database} (cached {(DateTime.UtcNow - cached.LastFetched).TotalMinutes:F0} minutes ago)");
-                    // Load the cached schema into the active context
                     _schemaManager.SetActiveDatabase(clusterUrl, database);
                     return new FetchSchemaResult(true, cached.Tables.Count, null);
                 }
@@ -41,14 +41,21 @@ public class SchemaHandler
             if (!clusterUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                 !clusterUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                clusterUri = $"https://{clusterUrl}.kusto.windows.net";
+                if (!clusterUrl.Contains(".kusto.windows.net", StringComparison.OrdinalIgnoreCase) &&
+                    !clusterUrl.Contains(".kusto.azure.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    clusterUri = $"https://{clusterUrl}.kusto.windows.net";
+                }
+                else
+                {
+                    clusterUri = $"https://{clusterUrl}";
+                }
             }
 
-            var kcsb = new Kusto.Data.KustoConnectionStringBuilder(clusterUri)
-                .WithAadUserPromptAuthentication();
-            kcsb.InitialCatalog = database;
+            var kcsb = MyTools.Core.KustoAuthProvider.CreateKcsb(clusterUri, database);
+            _lastKcsb = kcsb;
 
-            // Fetch table names
+            // Fetch table names only - fast single query
             var query = ".show tables | project TableName";
             var result = await _kustoService.RunQueryAsync(kcsb, query, ct, msg => _log?.Invoke(msg));
 
@@ -63,49 +70,7 @@ public class SchemaHandler
                 _schemaManager.AddTables(tableNames);
                 _log?.Invoke($"Added {tableNames.Count} tables to schema cache");
 
-                // Fetch columns for each table (in parallel, limited to 5 concurrent)
-                var columnTasks = new List<Task>();
-                var semaphore = new SemaphoreSlim(5);
-
-                foreach (var tableName in tableNames.Take(50)) // Limit to first 50 tables for performance
-                {
-                    columnTasks.Add(Task.Run(async () =>
-                    {
-                        await semaphore.WaitAsync(ct);
-                        try
-                        {
-                            var columnQuery = $".show table {tableName} schema as json";
-                            var columnResult = await _kustoService.RunQueryAsync(kcsb, columnQuery, ct, msg => { });
-
-                            if (columnResult != null && columnResult.Rows.Count > 0)
-                            {
-                                var schemaJson = columnResult.Rows[0][0]?.ToString();
-                                if (!string.IsNullOrWhiteSpace(schemaJson))
-                                {
-                                    var columns = ExtractColumnsFromSchemaJson(schemaJson);
-                                    if (columns.Any())
-                                    {
-                                        _schemaManager.AddTableWithColumns(tableName, columns);
-                                        _log?.Invoke($"  {tableName}: {columns.Count()} columns");
-                                    }
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _log?.Invoke($"  Failed to get columns for {tableName}: {ex.Message}");
-                        }
-                        finally
-                        {
-                            semaphore.Release();
-                        }
-                    }, ct));
-                }
-
-                await Task.WhenAll(columnTasks);
-                _log?.Invoke($"Schema fetch complete: {tableNames.Count} tables");
-
-                // Save to cache for future use
+                // Save to cache
                 var config = _schemaManager.GetConfig();
                 _schemaManager.SetCachedSchema(clusterUrl, database, config.Tables.ToList());
                 _log?.Invoke($"Schema cached for {clusterUrl}/{database}");
@@ -120,30 +85,6 @@ public class SchemaHandler
             _log?.Invoke($"Failed to fetch schema: {ex.Message}");
             return new FetchSchemaResult(false, 0, ex.Message);
         }
-    }
-
-    private static IEnumerable<string> ExtractColumnsFromSchemaJson(string schemaJson)
-    {
-        try
-        {
-            // Parse the Kusto schema JSON which has format like:
-            // {"Name":"TableName","OrderedColumns":[{"Name":"Col1","Type":"..."},{"Name":"Col2","Type":"..."}]}
-            var doc = System.Text.Json.JsonDocument.Parse(schemaJson);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("OrderedColumns", out var columns))
-            {
-                return columns.EnumerateArray()
-                    .Where(c => c.TryGetProperty("Name", out _))
-                    .Select(c => c.GetProperty("Name").GetString())
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .Cast<string>()
-                    .ToList();
-            }
-        }
-        catch { }
-
-        return Enumerable.Empty<string>();
     }
 
     public SchemaInfo GetSchema(string clusterUrl, string database)
@@ -187,168 +128,114 @@ public class SchemaHandler
         return _schemaManager.GetCacheStats();
     }
 
-    public CompletionItem[] GetCompletions(string query, int position)
+    public CompletionItem[] GetCompletions(string query, int position, string? clusterUrl = null, string? database = null)
     {
         var items = new List<CompletionItem>();
-        var config = _schemaManager.GetConfig();
 
-        // Get text up to cursor position for context analysis
-        var textBeforeCursor = position >= 0 && position <= query.Length
-            ? query.Substring(0, position)
-            : query;
-
-        // Detect context: find table name and check if we're expecting columns
-        var (tableName, isColumnContext) = AnalyzeQueryContext(textBeforeCursor);
-        _log?.Invoke($"GetCompletions: tables={config.Tables.Count}, table={tableName ?? "(none)"}, columnContext={isColumnContext}");
-
-        // If we found a table and are in column context, prioritize that table's columns
-        if (!string.IsNullOrEmpty(tableName) && isColumnContext)
+        List<KustoTableSchema> tablesToUse;
+        if (!string.IsNullOrEmpty(clusterUrl) && !string.IsNullOrEmpty(database))
         {
-            var tableSchema = config.Tables.FirstOrDefault(t =>
+            var cached = _schemaManager.GetCachedSchema(clusterUrl, database);
+            tablesToUse = (cached != null && cached.Tables.Count > 0)
+                ? cached.Tables
+                : _schemaManager.GetConfig().Tables;
+        }
+        else
+        {
+            tablesToUse = _schemaManager.GetConfig().Tables;
+        }
+
+        var config = _schemaManager.GetConfig();
+        var textBeforeCursor = position >= 0 && position <= query.Length
+            ? query.Substring(0, position) : query;
+
+        // Detect if we're in a column context (after | where, | project, etc.)
+        var tableName = ExtractTableName(textBeforeCursor);
+        var inColumnContext = IsColumnContext(textBeforeCursor);
+
+        if (!string.IsNullOrEmpty(tableName) && inColumnContext)
+        {
+            // Find the table and fetch columns on-demand if needed
+            var table = tablesToUse.FirstOrDefault(t =>
                 string.Equals(t.Name, tableName, StringComparison.OrdinalIgnoreCase));
 
-            if (tableSchema != null)
+            if (table != null && table.Columns.Count == 0 && _lastKcsb != null)
             {
-                // Add columns from the specific table first (with priority)
-                foreach (var column in tableSchema.Columns)
-                {
-                    items.Add(new CompletionItem(
-                        Label: column,
-                        Kind: "column",
-                        Detail: $"Column from {tableSchema.Name}"
-                    ));
-                }
-                _log?.Invoke($"Added {tableSchema.Columns.Count} columns from table {tableName}");
+                FetchColumnsForTable(table);
+            }
+
+            if (table != null && table.Columns.Count > 0)
+            {
+                foreach (var col in table.Columns)
+                    items.Add(new CompletionItem(Label: col, Kind: "column", Detail: $"{table.Name}"));
             }
         }
 
-        // Add keywords
+        // Always include keywords, functions, tables
         foreach (var keyword in config.Keywords)
-        {
-            items.Add(new CompletionItem(
-                Label: keyword,
-                Kind: "keyword",
-                Detail: "KQL Keyword"
-            ));
-        }
+            items.Add(new CompletionItem(Label: keyword, Kind: "keyword", Detail: "KQL Keyword"));
 
-        // Add functions
         foreach (var func in config.Functions)
-        {
-            items.Add(new CompletionItem(
-                Label: func,
-                Kind: "function",
-                Detail: "KQL Function",
-                InsertText: $"{func}($1)"
-            ));
-        }
+            items.Add(new CompletionItem(Label: func, Kind: "function", Detail: "KQL Function", InsertText: $"{func}($1)"));
 
-        // Add aggregation functions
         foreach (var aggFunc in config.AggregationFunctions)
-        {
-            items.Add(new CompletionItem(
-                Label: aggFunc,
-                Kind: "function",
-                Detail: "Aggregation Function",
-                InsertText: $"{aggFunc}($1)"
-            ));
-        }
+            items.Add(new CompletionItem(Label: aggFunc, Kind: "function", Detail: "Aggregation Function", InsertText: $"{aggFunc}($1)"));
 
-        // Add tables from schema
-        foreach (var table in config.Tables)
-        {
-            items.Add(new CompletionItem(
-                Label: table.Name,
-                Kind: "table",
-                Detail: $"Table with {table.Columns.Count} columns"
-            ));
-        }
+        foreach (var table in tablesToUse)
+            items.Add(new CompletionItem(Label: table.Name, Kind: "table", Detail: "Table"));
 
-        // Add all columns (lower priority) if not already in column context
-        if (string.IsNullOrEmpty(tableName) || !isColumnContext)
-        {
-            foreach (var column in _schemaManager.GetAllColumns())
-            {
-                items.Add(new CompletionItem(
-                    Label: column,
-                    Kind: "column",
-                    Detail: "Column"
-                ));
-            }
-        }
-
-        _log?.Invoke($"GetCompletions returning {items.Count} items");
         return items.ToArray();
     }
 
-    /// <summary>
-    /// Analyzes the query text to find the table name and determine if we're in a column context.
-    /// </summary>
-    private (string? tableName, bool isColumnContext) AnalyzeQueryContext(string textBeforeCursor)
+    private void FetchColumnsForTable(KustoTableSchema table)
     {
-        if (string.IsNullOrWhiteSpace(textBeforeCursor))
-            return (null, false);
+        try
+        {
+            _log?.Invoke($"Fetching columns for {table.Name}...");
+            var q = $"{table.Name} | getschema | project ColumnName";
+            var result = _kustoService.RunQueryAsync(_lastKcsb!, q, CancellationToken.None, _ => { }).Result;
+            if (result != null && result.Rows.Count > 0)
+            {
+                table.Columns = result.Rows
+                    .Select(row => row[0]?.ToString())
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .Cast<string>()
+                    .ToList();
+                _log?.Invoke($"{table.Name}: {table.Columns.Count} columns");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Column fetch failed for {table.Name}: {ex.Message}");
+        }
+    }
 
-        // Normalize whitespace and split by pipe
-        var normalized = textBeforeCursor.Trim();
-
-        // Find the table name - it's typically the first identifier in the query
-        // Pattern: TableName | where ... or TableName\n| where ...
-        string? tableName = null;
-
-        // Try to extract table name from the beginning of the query
-        // Skip 'let' statements and find the first table reference
-        var lines = normalized.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+    private static string? ExtractTableName(string text)
+    {
+        var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
-            var trimmedLine = line.Trim();
-
-            // Skip let statements
-            if (trimmedLine.StartsWith("let ", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            // Skip lines starting with pipe (continuation)
-            if (trimmedLine.StartsWith("|"))
-                continue;
-
-            // Extract the first word as potential table name
-            var match = System.Text.RegularExpressions.Regex.Match(trimmedLine, @"^(\w+)");
+            var t = line.Trim();
+            if (t.StartsWith("let ", StringComparison.OrdinalIgnoreCase) || t.StartsWith("|")) continue;
+            var match = System.Text.RegularExpressions.Regex.Match(t, @"^(\w+)");
             if (match.Success)
             {
-                var potentialTable = match.Groups[1].Value;
-                // Skip keywords that aren't table names
-                var skipWords = new[] { "let", "set", "print", "range", "datatable", "union", "find", "search" };
-                if (!skipWords.Contains(potentialTable, StringComparer.OrdinalIgnoreCase))
-                {
-                    tableName = potentialTable;
-                    break;
-                }
+                var word = match.Groups[1].Value;
+                var skip = new[] { "let", "set", "print", "range", "datatable", "union", "find", "search" };
+                if (!skip.Contains(word, StringComparer.OrdinalIgnoreCase))
+                    return word;
             }
         }
+        return null;
+    }
 
-        // Determine if we're in a column context
-        // Column context is after: where, project, extend, summarize, sort by, order by, on, by
-        var columnOperators = new[] { "where", "project", "extend", "summarize", "sort by", "order by", "on", "by", "distinct", "mv-expand" };
-        bool isColumnContext = false;
-
-        // Check the last part of the query (after the last pipe or operator)
-        var lastPipeIndex = normalized.LastIndexOf('|');
-        var relevantPart = lastPipeIndex >= 0 ? normalized.Substring(lastPipeIndex) : normalized;
-
-        foreach (var op in columnOperators)
-        {
-            // Check if the relevant part contains the operator
-            var opIndex = relevantPart.LastIndexOf(op, StringComparison.OrdinalIgnoreCase);
-            if (opIndex >= 0)
-            {
-                // Check if there's content after the operator (meaning we're typing a column)
-                var afterOp = relevantPart.Substring(opIndex + op.Length).TrimStart();
-                // We're in column context if we're right after the operator or typing
-                isColumnContext = true;
-                break;
-            }
-        }
-
-        return (tableName, isColumnContext);
+    private static bool IsColumnContext(string text)
+    {
+        var lastPipe = text.LastIndexOf('|');
+        if (lastPipe < 0) return false;
+        var afterPipe = text.Substring(lastPipe).ToLowerInvariant();
+        var ops = new[] { "where", "project", "extend", "summarize", "sort by", "order by",
+                          "on", "by", "distinct", "mv-expand", "join" };
+        return ops.Any(op => afterPipe.Contains(op));
     }
 }

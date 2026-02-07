@@ -916,7 +916,7 @@ public class OutlookService : IDisposable
             {
                 // Display the item using reflection to handle different item types
                 dynamic dynItem = item;
-                dynItem.Display(true); // true = modal
+                dynItem.Display(false); // false = non-modal, shows normal window with min/max buttons
                 Marshal.ReleaseComObject(item);
             }
             else

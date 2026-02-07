@@ -439,7 +439,12 @@ export function registerQueryCommands(
                     return;
                 }
 
-                loadingTabId = resultsProvider.showLoading(query, activeClusterUrl, activeDatabase, queryType);
+                // Check setting for new tab vs replace current
+                const tabConfig = vscode.workspace.getConfiguration('queryStudio');
+                const openInNewTab = tabConfig.get<boolean>('results.openInNewTab', true);
+                const replaceCurrentTab = !openInNewTab;
+
+                loadingTabId = resultsProvider.showLoading(query, activeClusterUrl, activeDatabase, queryType, replaceCurrentTab);
 
                 // Set running context for Stop button visibility
                 vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', true);
@@ -560,16 +565,130 @@ export function registerQueryCommands(
         })
     );
 
+    // Run Query (Alternate Tab Mode) - uses opposite of the default setting
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.runQueryAlternate', async () => {
+            outputChannel.appendLine('--- Run Query (Alternate Mode) command triggered ---');
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showWarningMessage('No active editor');
+                return;
+            }
+
+            let query: string;
+            const selection = editor.selection;
+
+            if (!selection.isEmpty) {
+                query = editor.document.getText(selection);
+            } else {
+                const queryBlockRange = findQueryBlockAtCursor(editor);
+                if (queryBlockRange) {
+                    query = editor.document.getText(queryBlockRange);
+                    editor.selection = new vscode.Selection(queryBlockRange.start, queryBlockRange.end);
+                } else {
+                    query = editor.document.getText();
+                }
+            }
+
+            if (!query.trim()) {
+                vscode.window.showWarningMessage('No query to execute');
+                return;
+            }
+
+            const langId = editor.document.languageId;
+            const currentMode = getCurrentMode();
+            let queryType: 'kusto' | 'ado' | 'outlook';
+            if (currentMode === 'outlook' || langId === 'oql') {
+                queryType = 'outlook';
+            } else if (currentMode === 'ado' || langId === 'wiql') {
+                queryType = 'ado';
+            } else {
+                queryType = 'kusto';
+            }
+
+            if (queryType !== 'outlook') {
+                if (!activeClusterUrl || !activeDatabase) {
+                    const config = vscode.workspace.getConfiguration('queryStudio');
+                    activeClusterUrl = config.get('defaultCluster') || '';
+                    activeDatabase = config.get('defaultDatabase') || '';
+                    if (!activeClusterUrl) {
+                        vscode.window.showWarningMessage('No active cluster. Select a cluster from the Data Sources panel.');
+                        return;
+                    }
+                }
+            }
+
+            let loadingTabId: string | undefined;
+            try {
+                await client.healthCheck();
+
+                // Use OPPOSITE of the setting (alternate mode)
+                const config = vscode.workspace.getConfiguration('queryStudio');
+                const openInNewTab = config.get<boolean>('results.openInNewTab', true);
+                const replaceCurrentTab = openInNewTab; // Flipped!
+
+                loadingTabId = resultsProvider.showLoading(query, activeClusterUrl, activeDatabase, queryType, replaceCurrentTab);
+                vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', true);
+
+                const request: QueryRequest = {
+                    query: query,
+                    clusterUrl: queryType === 'outlook' ? '' : (activeClusterUrl || ''),
+                    database: queryType === 'outlook' ? '' : (activeDatabase || ''),
+                    type: queryType,
+                    timeout: config.get('queryTimeout') || 300,
+                    maxResults: config.get('maxResults') || 10000
+                };
+
+                const currentTabId = loadingTabId;
+                const currentClusterUrl = activeClusterUrl;
+                const currentDatabase = activeDatabase;
+                const currentQueryType = queryType;
+                const currentQuery = query;
+
+                (async () => {
+                    try {
+                        const result = await client.executeQuery(request);
+
+                        if (result.success) {
+                            let title = 'Query Results';
+                            try {
+                                title = await client.aiGenerateTitle(currentQuery);
+                            } catch { }
+
+                            resultsProvider.showResults(result, title, currentQuery, currentClusterUrl, currentDatabase, currentQueryType, currentTabId);
+                        } else {
+                            resultsProvider.showError(result.error || 'Query failed', currentTabId);
+                        }
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : 'Unknown error';
+                        resultsProvider.showError(message, currentTabId);
+                    } finally {
+                        vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', false);
+                    }
+                })();
+
+                return;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                vscode.window.showErrorMessage(`Failed to start query: ${message}`);
+            }
+        })
+    );
+
     // Cancel Query
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.cancelQuery', async () => {
+            outputChannel.appendLine('[Cancel] Cancel command invoked');
             try {
                 vscode.window.setStatusBarMessage('Cancelling query...', 2000);
+                outputChannel.appendLine('[Cancel] Sending cancel request to server...');
                 await client.cancelQuery();
-                outputChannel.appendLine('Query cancelled');
+                outputChannel.appendLine('[Cancel] Server acknowledged cancel');
                 resultsProvider.showError('Query cancelled by user');
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Unknown error';
+                outputChannel.appendLine(`[Cancel] Error: ${message}`);
                 vscode.window.showErrorMessage(`Failed to cancel query: ${message}`);
             }
         })

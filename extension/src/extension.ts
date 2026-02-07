@@ -731,6 +731,211 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Register report issue command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.reportIssue', async () => {
+            await vscode.env.openExternal(vscode.Uri.parse('https://github.com/InbarR/Quest/issues/new'));
+        })
+    );
+
+    // Register AI persona commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.selectAiPersona', async () => {
+            const config = vscode.workspace.getConfiguration('queryStudio.ai');
+            const personas: { name: string; prompt: string; description?: string; icon?: string }[] = config.get('personas') || [];
+            const currentPersona = config.get<string>('defaultPersona') || '';
+
+            const items: vscode.QuickPickItem[] = [
+                {
+                    label: '$(sparkle) Default Assistant',
+                    description: currentPersona === '' ? '(active)' : '',
+                    detail: 'Standard query assistant without custom instructions'
+                },
+                ...personas.map(p => ({
+                    label: `${p.icon || '$(account)'} ${p.name}`,
+                    description: p.name === currentPersona ? '(active)' : '',
+                    detail: p.description || p.prompt.substring(0, 80) + (p.prompt.length > 80 ? '...' : '')
+                }))
+            ];
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select an AI persona',
+                title: 'Quest AI Personas'
+            });
+
+            if (selected) {
+                const selectedName = selected.label.includes('Default Assistant') ? '' :
+                    personas.find(p => selected.label.includes(p.name))?.name || '';
+                await config.update('defaultPersona', selectedName, vscode.ConfigurationTarget.Global);
+                aiChatProvider.setPersona(selectedName);
+                vscode.window.showInformationMessage(`AI persona set to: ${selectedName || 'Default Assistant'}`);
+            }
+        }),
+        vscode.commands.registerCommand('queryStudio.manageAiPersonas', async () => {
+            const config = vscode.workspace.getConfiguration('queryStudio.ai');
+            const personas: { name: string; prompt: string; description?: string; icon?: string }[] = config.get('personas') || [];
+
+            const actions = [
+                { label: '$(add) Create New Persona', value: 'create' },
+                ...(personas.length > 0 ? [
+                    { label: '$(edit) Edit Persona', value: 'edit' },
+                    { label: '$(trash) Delete Persona', value: 'delete' }
+                ] : [])
+            ];
+
+            const action = await vscode.window.showQuickPick(actions, {
+                placeHolder: 'What would you like to do?',
+                title: 'Manage AI Personas'
+            });
+
+            if (!action) return;
+
+            if (action.value === 'create') {
+                const name = await vscode.window.showInputBox({
+                    prompt: 'Enter a name for the persona',
+                    placeHolder: 'e.g., Expert Analyst, Concise Helper',
+                    ignoreFocusOut: true
+                });
+                if (!name) return;
+
+                if (personas.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+                    vscode.window.showErrorMessage(`A persona named "${name}" already exists`);
+                    return;
+                }
+
+                const prompt = await vscode.window.showInputBox({
+                    prompt: 'Enter the system prompt for this persona',
+                    placeHolder: 'e.g., You are an expert data analyst who provides detailed explanations...',
+                    validateInput: (value) => value.length < 10 ? 'Prompt should be at least 10 characters' : null,
+                    ignoreFocusOut: true
+                });
+                if (!prompt) return;
+
+                const description = await vscode.window.showInputBox({
+                    prompt: 'Enter a short description (optional)',
+                    placeHolder: 'e.g., Provides detailed technical explanations',
+                    ignoreFocusOut: true
+                });
+
+                const iconOptions = [
+                    { label: '$(account) Person', value: '$(account)' },
+                    { label: '$(beaker) Scientist', value: '$(beaker)' },
+                    { label: '$(book) Scholar', value: '$(book)' },
+                    { label: '$(lightbulb) Idea', value: '$(lightbulb)' },
+                    { label: '$(rocket) Fast', value: '$(rocket)' },
+                    { label: '$(tools) Expert', value: '$(tools)' },
+                    { label: '$(zap) Quick', value: '$(zap)' }
+                ];
+
+                const icon = await vscode.window.showQuickPick(iconOptions, {
+                    placeHolder: 'Choose an icon for the persona'
+                });
+
+                personas.push({
+                    name,
+                    prompt,
+                    description: description || undefined,
+                    icon: icon?.value || '$(account)'
+                });
+
+                await config.update('personas', personas, vscode.ConfigurationTarget.Global);
+                vscode.window.showInformationMessage(`Persona "${name}" created`);
+
+            } else if (action.value === 'edit') {
+                const personaItems = personas.map(p => ({
+                    label: `${p.icon || '$(account)'} ${p.name}`,
+                    description: p.description,
+                    persona: p
+                }));
+
+                const selected = await vscode.window.showQuickPick(personaItems, {
+                    placeHolder: 'Select a persona to edit'
+                });
+                if (!selected) return;
+
+                const newPrompt = await vscode.window.showInputBox({
+                    prompt: 'Edit the system prompt',
+                    value: selected.persona.prompt,
+                    validateInput: (value) => value.length < 10 ? 'Prompt should be at least 10 characters' : null,
+                    ignoreFocusOut: true
+                });
+                if (!newPrompt) return;
+
+                const newDescription = await vscode.window.showInputBox({
+                    prompt: 'Edit the description (optional)',
+                    value: selected.persona.description || '',
+                    ignoreFocusOut: true
+                });
+
+                const idx = personas.findIndex(p => p.name === selected.persona.name);
+                if (idx >= 0) {
+                    personas[idx].prompt = newPrompt;
+                    personas[idx].description = newDescription || undefined;
+                    await config.update('personas', personas, vscode.ConfigurationTarget.Global);
+                    vscode.window.showInformationMessage(`Persona "${selected.persona.name}" updated`);
+                }
+
+            } else if (action.value === 'delete') {
+                const personaItems = personas.map(p => ({
+                    label: `${p.icon || '$(account)'} ${p.name}`,
+                    description: p.description,
+                    persona: p
+                }));
+
+                const selected = await vscode.window.showQuickPick(personaItems, {
+                    placeHolder: 'Select a persona to delete'
+                });
+                if (!selected) return;
+
+                const confirm = await vscode.window.showWarningMessage(
+                    `Delete persona "${selected.persona.name}"?`,
+                    { modal: true },
+                    'Delete'
+                );
+                if (confirm !== 'Delete') return;
+
+                const filtered = personas.filter(p => p.name !== selected.persona.name);
+                await config.update('personas', filtered, vscode.ConfigurationTarget.Global);
+
+                // Clear default if deleted
+                if (config.get<string>('defaultPersona') === selected.persona.name) {
+                    await config.update('defaultPersona', '', vscode.ConfigurationTarget.Global);
+                    aiChatProvider.setPersona('');
+                }
+
+                vscode.window.showInformationMessage(`Persona "${selected.persona.name}" deleted`);
+            }
+        })
+    );
+
+    // Register reset AI token command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.resetAiToken', async () => {
+            const confirm = await vscode.window.showWarningMessage(
+                'This will clear your saved AI authentication token. You will need to re-authenticate with GitHub on your next AI request.',
+                { modal: true },
+                'Reset Token'
+            );
+
+            if (confirm === 'Reset Token') {
+                try {
+                    const result = await sidecar.client.clearAiToken();
+                    if (result.success) {
+                        vscode.window.showInformationMessage('AI token cleared. You will be prompted to authenticate on your next AI request.');
+                        outputChannel.appendLine('[AI] Token cleared successfully');
+                    } else {
+                        vscode.window.showErrorMessage(`Failed to clear AI token: ${result.error}`);
+                        outputChannel.appendLine(`[AI] Failed to clear token: ${result.error}`);
+                    }
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    vscode.window.showErrorMessage(`Failed to clear AI token: ${message}`);
+                    outputChannel.appendLine(`[AI] Error clearing token: ${message}`);
+                }
+            }
+        })
+    );
+
     // Periodic health check to update connection status
     const healthCheckInterval = setInterval(async () => {
         try {
@@ -758,9 +963,20 @@ export async function activate(context: vscode.ExtensionContext) {
     }, 500);
 
     // Handle sidecar startup completion in the background (non-blocking)
-    sidecarPromise.then(() => {
+    sidecarPromise.then(async () => {
         outputChannel.appendLine('Quest fully ready (sidecar connected)');
         updateConnectionStatus(true);
+
+        // Send GitHub token from VS Code's built-in auth to sidecar (non-interactive)
+        try {
+            const token = await aiChatProvider.ensureGithubToken(false);
+            if (token) {
+                await sidecar.client.setAiToken(token);
+                outputChannel.appendLine('[AI] GitHub token sent to server');
+            }
+        } catch (error) {
+            outputChannel.appendLine(`[AI] Token not available at startup (will prompt on first chat): ${error}`);
+        }
     }).catch((error) => {
         const message = error instanceof Error ? error.message : 'Unknown error';
         outputChannel.appendLine(`Sidecar startup failed: ${message}`);

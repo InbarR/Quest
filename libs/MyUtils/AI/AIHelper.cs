@@ -90,5 +90,39 @@ Output only the title, nothing else.";
 
             return await _chatClient.VisionCompleteAsync(imageBase64, imageMimeType, systemPrompt, userPrompt, temperature, ct);
         }
+
+        /// <summary>
+        /// Clears the stored AI authentication token, forcing re-authentication on next request.
+        /// </summary>
+        public void ClearStoredToken()
+        {
+            _chatClient.ClearStoredToken();
+            _log?.Invoke("AI token cleared", false);
+        }
+
+        /// <summary>
+        /// Sets the GitHub token directly (e.g., restored from extension storage).
+        /// </summary>
+        public void SetGitHubToken(string token)
+        {
+            _chatClient.SetGitHubToken(token);
+        }
+
+        /// <summary>
+        /// Gets the current GitHub token if available.
+        /// </summary>
+        public string GetGitHubToken()
+        {
+            return _chatClient.GetGitHubToken();
+        }
+
+        /// <summary>
+        /// Completes device code authentication by polling for the access token.
+        /// Call this after the user has authorized the device code.
+        /// </summary>
+        public Task<bool> CompleteDeviceCodeAuthAsync(string deviceCode, int interval, CancellationToken ct = default)
+        {
+            return _chatClient.CompleteDeviceCodeAuthAsync(deviceCode, interval, ct);
+        }
     }
 }

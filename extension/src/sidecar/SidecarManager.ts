@@ -192,25 +192,25 @@ export class SidecarManager {
         // For development: check parent directory (published output)
         const devPublishPath = path.join(this.context.extensionPath, '..', 'server', 'bin', 'Release', 'net8.0', runtimeId, 'publish', execName);
 
-        // Prefer bundled, then release, then debug, then published
+        // For dev: prefer debug > release > published > bundled
         const fs = require('fs');
-        if (fs.existsSync(bundledPath)) {
-            return bundledPath;
+        if (fs.existsSync(devDebugPath)) {
+            this.outputChannel.appendLine(`Using debug build: ${devDebugPath}`);
+            return devDebugPath;
         }
         if (fs.existsSync(devReleasePath)) {
             this.outputChannel.appendLine(`Using release build: ${devReleasePath}`);
             return devReleasePath;
         }
-        if (fs.existsSync(devDebugPath)) {
-            this.outputChannel.appendLine(`Using debug build: ${devDebugPath}`);
-            return devDebugPath;
-        }
         if (fs.existsSync(devPublishPath)) {
             return devPublishPath;
         }
+        if (fs.existsSync(bundledPath)) {
+            return bundledPath;
+        }
 
         // Fallback
-        return devReleasePath;
+        return bundledPath;
     }
 
     async stop(): Promise<void> {

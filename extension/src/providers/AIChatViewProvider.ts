@@ -39,6 +39,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     private _activeClusterName?: string;
     private _activeClusterType?: 'kusto' | 'ado' | 'outlook';
     private _inputHistory: string[] = [];
+    private _currentPersona: string = '';
     private static readonly INPUT_HISTORY_KEY = 'aiChat.inputHistory';
     private static readonly INPUT_HISTORY_MAX = 100;
 
@@ -50,6 +51,9 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     ) {
         // Load persisted input history
         this._inputHistory = this.context.globalState.get<string[]>(AIChatViewProvider.INPUT_HISTORY_KEY, []);
+        // Load default persona from settings
+        const config = vscode.workspace.getConfiguration('queryStudio.ai');
+        this._currentPersona = config.get<string>('defaultPersona') || '';
     }
 
     private async saveInputHistory(input: string) {
@@ -144,6 +148,48 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         this._currentMode = mode;
         await this._loadSuggestions();
         this._updateView();
+    }
+
+    /**
+     * Gets a GitHub token from VS Code's built-in authentication provider.
+     * This reuses the same GitHub session the user has for Copilot, etc.
+     */
+    public async ensureGithubToken(createIfNone: boolean = false): Promise<string | undefined> {
+        try {
+            const session = await vscode.authentication.getSession('github', ['read:user'], { createIfNone });
+            if (session) {
+                this.outputChannel.appendLine('[AI] GitHub token obtained from VS Code auth');
+                return session.accessToken;
+            }
+        } catch (e) {
+            this.outputChannel.appendLine(`[AI] Failed to get GitHub session: ${e}`);
+        }
+        return undefined;
+    }
+
+    public setPersona(personaName: string) {
+        this._currentPersona = personaName;
+        this._updateView();
+        this.outputChannel.appendLine(`[AI Chat] Persona set to: ${personaName || 'Default Assistant'}`);
+    }
+
+    private _getPersonaPrompt(): string | undefined {
+        if (!this._currentPersona) return undefined;
+        const config = vscode.workspace.getConfiguration('queryStudio.ai');
+        const personas: { name: string; prompt: string }[] = config.get('personas') || [];
+        const persona = personas.find(p => p.name === this._currentPersona);
+        return persona?.prompt;
+    }
+
+    private _getPersonaInfo(): { name: string; icon: string } | null {
+        if (!this._currentPersona) return null;
+        const config = vscode.workspace.getConfiguration('queryStudio.ai');
+        const personas: { name: string; prompt: string; icon?: string }[] = config.get('personas') || [];
+        const persona = personas.find(p => p.name === this._currentPersona);
+        if (persona) {
+            return { name: persona.name, icon: persona.icon || '$(account)' };
+        }
+        return null;
     }
 
     private async _loadSuggestions() {
@@ -284,6 +330,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             case 'sendFeedback':
                 this._openFeedback();
                 break;
+            case 'selectPersona':
+                vscode.commands.executeCommand('queryStudio.selectAiPersona');
+                break;
+            case 'managePersonas':
+                vscode.commands.executeCommand('queryStudio.manageAiPersonas');
+                break;
         }
     }
 
@@ -381,43 +433,52 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 this.outputChannel.appendLine(`[AI Chat] Failed to load favorites/history for context: ${e}`);
             }
 
-            const response = await this.client.aiChat({
+            // Ensure GitHub token is available via VS Code auth before sending
+            const ghToken = await this.ensureGithubToken(false);
+            if (ghToken) {
+                await this.client.setAiToken(ghToken);
+            }
+
+            const personaPrompt = this._getPersonaPrompt();
+            let response = await this.client.aiChat({
                 message: text,
                 mode: this._currentMode,
                 sessionId: this._sessionId,
                 context: {
                     currentQuery,
                     favorites: favorites.length > 0 ? favorites : undefined,
-                    recentQueries: recentQueries.length > 0 ? recentQueries : undefined
+                    recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
+                    personaInstructions: personaPrompt
                 }
             });
+
+            // If auth required, prompt VS Code sign-in and retry once
+            if (response.authRequired) {
+                this.outputChannel.appendLine('[AI Chat] Auth required, prompting VS Code GitHub sign-in');
+                const token = await this.ensureGithubToken(true);
+                if (token) {
+                    await this.client.setAiToken(token);
+                    response = await this.client.aiChat({
+                        message: text,
+                        mode: this._currentMode,
+                        sessionId: this._sessionId,
+                        context: {
+                            currentQuery,
+                            favorites: favorites.length > 0 ? favorites : undefined,
+                            recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
+                            personaInstructions: personaPrompt
+                        }
+                    });
+                } else {
+                    throw new Error('GitHub sign-in is required for AI chat. Please sign in to GitHub in VS Code.');
+                }
+            }
 
             if (response.sessionId) {
                 this._sessionId = response.sessionId;
             }
 
             this.outputChannel.appendLine(`[AI Chat] Response received (session: ${response.sessionId}): ${response.message?.substring(0, 100) || '(empty)'}...`);
-
-            // Handle device code authentication required
-            if (response.authRequired && response.authUrl && response.authCode) {
-                this.outputChannel.appendLine(`[AI Chat] Device code auth required: ${response.authUrl} code: ${response.authCode}`);
-
-                const openBrowser = await vscode.window.showInformationMessage(
-                    `GitHub authentication required.\n\nCode: ${response.authCode}`,
-                    { modal: false },
-                    'Open GitHub',
-                    'Copy Code'
-                );
-
-                if (openBrowser === 'Open GitHub') {
-                    await vscode.env.openExternal(vscode.Uri.parse(response.authUrl));
-                    await vscode.env.clipboard.writeText(response.authCode);
-                    vscode.window.showInformationMessage(`Code "${response.authCode}" copied to clipboard. Paste it on GitHub to authorize.`);
-                } else if (openBrowser === 'Copy Code') {
-                    await vscode.env.clipboard.writeText(response.authCode);
-                    vscode.window.showInformationMessage(`Code copied. Visit ${response.authUrl} to authorize.`);
-                }
-            }
 
             if (!response.message || response.message.trim() === '') {
                 throw new Error('AI returned empty response. Check Output > Quest for details.');
@@ -497,12 +558,14 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
     private _updateView() {
         if (!this._view) return;
+        const personaInfo = this._getPersonaInfo();
         this._view.webview.postMessage({
             command: 'updateMessages',
             messages: this._messages,
             modeDisplayName: this._getModeDisplayName(),
             modeIcon: this._getModeIcon(),
-            suggestions: this._suggestions
+            suggestions: this._suggestions,
+            persona: personaInfo
         });
         this._updateContextBar();
     }
@@ -634,6 +697,57 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         }
         .new-chat-btn:hover {
             background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .persona-selector {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .persona-btn {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-panel-border);
+            padding: 3px 10px;
+            border-radius: 12px 0 0 12px;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: 500;
+            transition: background 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .persona-btn:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .persona-btn.active {
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            border-color: var(--vscode-badge-background);
+        }
+        .persona-icon {
+            font-size: 12px;
+        }
+        .persona-name {
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .persona-settings-btn {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-panel-border);
+            border-left: none;
+            padding: 3px 6px;
+            border-radius: 0 12px 12px 0;
+            cursor: pointer;
+            font-size: 10px;
+            transition: background 0.1s;
+        }
+        .persona-settings-btn:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+            color: var(--vscode-textLink-foreground);
         }
         .context-bar {
             display: flex;
@@ -981,7 +1095,14 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             <span class="status-dot"></span>
         </span>
         <div class="header-actions">
-            <button class="new-chat-btn" onclick="clearChat()" title="Start a new chat conversation">+ New Chat</button>
+            <div class="persona-selector">
+                <button class="persona-btn" id="personaBtn" onclick="selectPersona()" title="Click to change AI persona">
+                    <span class="persona-icon">🤖</span>
+                    <span class="persona-name">Default</span>
+                </button>
+                <button class="persona-settings-btn" onclick="managePersonas()" title="Create or manage AI personas">⚙</button>
+            </div>
+            <button class="new-chat-btn" onclick="clearChat()" title="Start a new chat conversation">+ New</button>
         </div>
     </div>
     <div class="context-bar" id="contextBar">
@@ -1037,6 +1158,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         let modeDisplayName = 'KQL (Kusto Query Language)';
         let modeIcon = 'K';
         let suggestions = [];
+        let currentPersona = null;
 
         window.addEventListener('message', event => {
             const msg = event.data;
@@ -1046,6 +1168,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     if (msg.modeDisplayName) modeDisplayName = msg.modeDisplayName;
                     if (msg.modeIcon) modeIcon = msg.modeIcon;
                     if (msg.suggestions) suggestions = msg.suggestions;
+                    currentPersona = msg.persona || null;
+                    updatePersonaButton();
                     renderMessages();
                     break;
                 case 'setTyping':
@@ -1188,6 +1312,32 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
         function sendFeedback() {
             vscode.postMessage({ command: 'sendFeedback' });
+        }
+
+        function selectPersona() {
+            vscode.postMessage({ command: 'selectPersona' });
+        }
+
+        function updatePersonaButton() {
+            const btn = document.getElementById('personaBtn');
+            if (!btn) return;
+            const iconSpan = btn.querySelector('.persona-icon');
+            const nameSpan = btn.querySelector('.persona-name');
+            if (currentPersona && currentPersona.name) {
+                if (nameSpan) nameSpan.textContent = currentPersona.name;
+                if (iconSpan) iconSpan.textContent = '✨';
+                btn.classList.add('active');
+                btn.title = 'Current persona: ' + currentPersona.name + '. Click to change.';
+            } else {
+                if (nameSpan) nameSpan.textContent = 'Default';
+                if (iconSpan) iconSpan.textContent = '🤖';
+                btn.classList.remove('active');
+                btn.title = 'Click to select an AI persona';
+            }
+        }
+
+        function managePersonas() {
+            vscode.postMessage({ command: 'managePersonas' });
         }
 
         function renderMessages() {

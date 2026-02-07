@@ -2,7 +2,7 @@
   "name": "quest",
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "inbar-rotem",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -199,6 +199,13 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.runQueryAlternate",
+        "title": "Run Query in Same Tab",
+        "shortTitle": "Run ↺",
+        "icon": "$(sync)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.cancelQuery",
         "title": "Cancel Query",
         "icon": "$(stop-circle)",
@@ -304,6 +311,30 @@
         "command": "queryStudio.aiGenerate",
         "title": "Generate Query with AI",
         "icon": "$(sparkle)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.resetAiToken",
+        "title": "Reset AI Authentication Token",
+        "icon": "$(key)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.manageAiPersonas",
+        "title": "Manage AI Personas",
+        "icon": "$(account)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.selectAiPersona",
+        "title": "Select AI Persona",
+        "icon": "$(account)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.reportIssue",
+        "title": "Report Issue",
+        "icon": "$(bug)",
         "category": "Quest"
       },
       {
@@ -428,9 +459,9 @@
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
       },
       {
-        "command": "queryStudio.runQuery",
-        "key": "F5",
-        "when": "editorTextFocus && (resourceExtname == .kql || resourceExtname == .wiql || resourceExtname == .oql)"
+        "command": "queryStudio.runQueryAlternate",
+        "key": "ctrl+shift+enter",
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
       },
       {
         "command": "queryStudio.cancelQuery",
@@ -446,6 +477,10 @@
         "command": "queryStudio.aiChat",
         "key": "ctrl+shift+a",
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.reportIssue",
+        "key": "ctrl+shift+b"
       },
       {
         "command": "queryStudio.showKeyboardShortcuts",
@@ -476,8 +511,8 @@
           "group": "navigation@1"
         },
         {
-          "command": "queryStudio.cancelQuery",
-          "when": "(editorLangId == kql || editorLangId == wiql || editorLangId == oql) && queryStudio.isRunning",
+          "command": "queryStudio.runQueryAlternate",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@2"
         },
         {
@@ -646,6 +681,11 @@
           "default": 10000,
           "description": "Maximum number of rows to return"
         },
+        "queryStudio.results.openInNewTab": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open query results in a new tab (true) or replace the current results tab (false)"
+        },
         "queryStudio.autoSaveHistory": {
           "type": "boolean",
           "default": true,
@@ -670,6 +710,34 @@
           "type": "string",
           "default": "gpt-4o-mini",
           "description": "AI model to use"
+        },
+        "queryStudio.ai.personas": {
+          "type": "array",
+          "default": [],
+          "description": "Custom AI personas with different system prompts",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name for this persona"
+              },
+              "icon": {
+                "type": "string",
+                "description": "Emoji or short text icon (e.g., '🤖' or 'E')"
+              },
+              "prompt": {
+                "type": "string",
+                "description": "Custom instructions for this persona"
+              }
+            },
+            "required": ["name", "prompt"]
+          }
+        },
+        "queryStudio.ai.defaultPersona": {
+          "type": "string",
+          "default": "",
+          "description": "Name of the default persona to use (empty for default assistant)"
         },
         "queryStudio.sidecar.path": {
           "type": "string",

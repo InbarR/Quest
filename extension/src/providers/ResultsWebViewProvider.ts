@@ -164,6 +164,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 }
                 break;
             case 'cancelQuery':
+                console.log('[Quest] Cancel message received from webview');
                 vscode.commands.executeCommand('queryStudio.cancelQuery');
                 break;
             case 'openInAdx':
@@ -548,29 +549,55 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public showLoading(query?: string, clusterUrl?: string, database?: string, queryType?: 'kusto' | 'ado' | 'outlook'): string {
-        // Create a new tab for loading
-        const tabId = `tab_${++this._tabCounter}`;
-        this._loadingTabId = tabId; // Keep for backward compatibility
+    public showLoading(query?: string, clusterUrl?: string, database?: string, queryType?: 'kusto' | 'ado' | 'outlook', replaceCurrentTab: boolean = false): string {
+        let tabId: string;
 
-        // Add placeholder tab to _tabs array so it persists when switching tabs
-        const loadingTab: ResultTab = {
-            id: tabId,
-            title: '⏳ Running...',
-            result: {
-                success: true,
-                columns: [],
-                rows: [],
-                rowCount: 0,
-                executionTimeMs: 0
-            },
-            isLoading: true,
-            query: query,
-            clusterUrl: clusterUrl,
-            database: database,
-            queryType: queryType
-        };
-        this._tabs.push(loadingTab);
+        // If replaceCurrentTab is true and we have an active tab, reuse it
+        if (replaceCurrentTab && this._activeTabId && this._tabs.length > 0) {
+            tabId = this._activeTabId;
+            // Update the existing tab to loading state
+            const existingIndex = this._tabs.findIndex(t => t.id === tabId);
+            if (existingIndex >= 0) {
+                this._tabs[existingIndex] = {
+                    id: tabId,
+                    title: '⏳ Running...',
+                    result: {
+                        success: true,
+                        columns: [],
+                        rows: [],
+                        rowCount: 0,
+                        executionTimeMs: 0
+                    },
+                    isLoading: true,
+                    query: query,
+                    clusterUrl: clusterUrl,
+                    database: database,
+                    queryType: queryType
+                };
+            }
+        } else {
+            // Create a new tab for loading
+            tabId = `tab_${++this._tabCounter}`;
+            const loadingTab: ResultTab = {
+                id: tabId,
+                title: '⏳ Running...',
+                result: {
+                    success: true,
+                    columns: [],
+                    rows: [],
+                    rowCount: 0,
+                    executionTimeMs: 0
+                },
+                isLoading: true,
+                query: query,
+                clusterUrl: clusterUrl,
+                database: database,
+                queryType: queryType
+            };
+            this._tabs.push(loadingTab);
+        }
+
+        this._loadingTabId = tabId; // Keep for backward compatibility
         this._activeTabId = tabId;
 
         if (this._view) {
@@ -583,7 +610,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 database: database,
                 queryType: queryType,
                 hasQuery: !!query,
-                hasConnection: !!(clusterUrl && database) || queryType === 'outlook'
+                hasConnection: !!(clusterUrl && database) || queryType === 'outlook',
+                replaceTab: replaceCurrentTab
             });
         }
         return tabId;
@@ -1979,7 +2007,17 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             const msg = event.data;
             switch (msg.command) {
                 case 'showLoading':
-                    tabs.push({ id: msg.tabId, title: '⏳ Running...', queryType: msg.queryType });
+                    // Check if we should replace an existing tab or create a new one
+                    if (msg.replaceTab) {
+                        const existingIndex = tabs.findIndex(t => t.id === msg.tabId);
+                        if (existingIndex >= 0) {
+                            tabs[existingIndex] = { id: msg.tabId, title: '⏳ Running...', queryType: msg.queryType };
+                        } else {
+                            tabs.push({ id: msg.tabId, title: '⏳ Running...', queryType: msg.queryType });
+                        }
+                    } else {
+                        tabs.push({ id: msg.tabId, title: '⏳ Running...', queryType: msg.queryType });
+                    }
                     activeTabId = msg.tabId;
                     hasQuery = msg.hasQuery;
                     hasConnection = msg.hasConnection;
@@ -2250,7 +2288,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         function openInAdx() { vscode.postMessage({ command: 'openInAdx' }); }
         function openInAdo() { vscode.postMessage({ command: 'openInAdo' }); }
         function reRun() { vscode.postMessage({ command: 'reRun' }); }
-        function cancelQuery() { vscode.postMessage({ command: 'cancelQuery' }); }
+        function cancelQuery() {
+            console.log('[Quest] Cancel button clicked');
+            vscode.postMessage({ command: 'cancelQuery' });
+        }
         function exportCsv() { vscode.postMessage({ command: 'export', format: 'csv' }); }
         function exportJson() { vscode.postMessage({ command: 'export', format: 'json' }); }
         function saveAsPreset() { vscode.postMessage({ command: 'saveAsPreset' }); }

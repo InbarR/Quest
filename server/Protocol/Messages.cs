@@ -70,18 +70,18 @@ public record AiContext(
     string? ClusterUrl = null,
     string? Database = null,
     string[]? Favorites = null,
-    string[]? RecentQueries = null
+    string[]? RecentQueries = null,
+    string? PersonaInstructions = null
 );
 public record AiChatResponse(
     string Message,
     string SessionId,
     string? SuggestedQuery = null,
-    bool AuthRequired = false,
-    string? AuthUrl = null,
-    string? AuthCode = null
+    bool AuthRequired = false
 );
 public record GenerateTitleRequest(string Query);
 public record GenerateTitleResponse(string Title);
+public record ClearTokenResult(bool Success, string? Error);
 
 // Results History
 public record ResultHistoryItem(

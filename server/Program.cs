@@ -286,6 +286,8 @@ public class SimpleJsonRpcServer
                 "ai/chat" => await AiChatAsync(paramsElement, ct),
                 "ai/generateTitle" => await GenerateTitleAsync(paramsElement, ct),
                 "ai/extractFromImage" => await ExtractFromImageAsync(paramsElement, ct),
+                "ai/clearToken" => ClearAiToken(),
+                "ai/setToken" => SetAiToken(paramsElement),
                 "import/kustoExplorer" => ImportKustoExplorerConnections(paramsElement),
                 "resultHistory/list" => GetResultHistory(paramsElement),
                 "resultHistory/save" => SaveResultHistory(paramsElement),
@@ -432,15 +434,14 @@ public class SimpleJsonRpcServer
     {
         var query = p.GetProperty("query").GetString()!;
         var position = p.GetProperty("position").GetInt32();
-        return _schema.GetCompletions(query, position);
+        var clusterUrl = p.TryGetProperty("clusterUrl", out var cu) ? cu.GetString() : null;
+        var database = p.TryGetProperty("database", out var db) ? db.GetString() : null;
+        return _schema.GetCompletions(query, position, clusterUrl, database);
     }
 
     private async Task<AiChatResponse> AiChatAsync(JsonElement p, CancellationToken ct)
     {
-        var rawJson = p.GetRawText();
-        _log($"[AI] Raw request JSON: {rawJson.Substring(0, Math.Min(500, rawJson.Length))}...");
-        var request = JsonSerializer.Deserialize<AiChatRequest>(rawJson, _jsonOptions)!;
-        _log($"[AI] Deserialized - Context null: {request.Context == null}, CurrentQuery null: {request.Context?.CurrentQuery == null}");
+        var request = JsonSerializer.Deserialize<AiChatRequest>(p.GetRawText(), _jsonOptions)!;
         return await _ai.ChatAsync(request, ct);
     }
 
@@ -448,6 +449,18 @@ public class SimpleJsonRpcServer
     {
         var query = p.GetProperty("query").GetString()!;
         return await _ai.GenerateTitleAsync(query, ct);
+    }
+
+    private ClearTokenResult ClearAiToken()
+    {
+        return _ai.ClearToken();
+    }
+
+    private object SetAiToken(JsonElement p)
+    {
+        var token = p.GetProperty("token").GetString();
+        var success = _ai.SetToken(token ?? "");
+        return new { success };
     }
 
     private async Task<ExtractedDataSourceInfo> ExtractFromImageAsync(JsonElement p, CancellationToken ct)

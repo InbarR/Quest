@@ -153,8 +153,13 @@ public class QueryHandler : IDisposable
 
     public void Cancel()
     {
-        _log("Cancel requested");
+        var hasActiveCts = _currentQueryCts != null;
+        _log($"Cancel requested (active query: {hasActiveCts})");
         _currentQueryCts?.Cancel();
+        if (hasActiveCts)
+        {
+            _log("Cancellation token triggered");
+        }
     }
 
     /// <summary>

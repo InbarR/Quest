@@ -18,18 +18,8 @@ public class AiHandler
 
     public async Task<AiChatResponse> ChatAsync(AiChatRequest request, CancellationToken ct)
     {
-        _log?.Invoke($"[AI] ========== ChatAsync START ==========");
-        _log?.Invoke($"[AI] Message: {request.Message?.Substring(0, Math.Min(50, request.Message?.Length ?? 0))}...");
-        _log?.Invoke($"[AI] Context is null: {request.Context == null}");
-        if (request.Context != null)
-        {
-            _log?.Invoke($"[AI] Context.CurrentQuery is null: {request.Context.CurrentQuery == null}");
-            _log?.Invoke($"[AI] Context.CurrentQuery value: '{request.Context.CurrentQuery ?? "(null)"}'");
-        }
-
         if (_aiHelper == null)
         {
-            _log?.Invoke("[AI] AIHelper is null - returning error message");
             return new AiChatResponse(
                 Message: "AI features are not configured. Please check the Output panel for details.\n\nTo enable AI:\n1. Create a file at ~/.gh_token with your GitHub token, OR\n2. The extension will use GitHub Copilot device code authentication",
                 SessionId: Guid.NewGuid().ToString(),
@@ -43,28 +33,21 @@ public class AiHandler
         {
             session = new AiChatSession();
             _sessions[sessionId] = session;
-            _log?.Invoke($"[AI] Created new session: {sessionId}");
         }
 
-        // System prompt is mode-specific
         var mode = request.Mode ?? "kusto";
         var systemPrompt = GetSystemPrompt(mode);
-        session.UpdateSystemPrompt(systemPrompt);
-        _log?.Invoke($"[AI] Mode: {mode}");
 
-        // Build the user message with context prepended
-        var currentQuery = request.Context?.CurrentQuery;
-        _log?.Invoke($"[AI] Context - CurrentQuery: {(currentQuery != null ? $"'{currentQuery.Substring(0, Math.Min(80, currentQuery.Length))}'" : "NULL")}");
-        _log?.Invoke($"[AI] Context - Favorites: {request.Context?.Favorites?.Length ?? 0}, Recent: {request.Context?.RecentQueries?.Length ?? 0}");
+        if (!string.IsNullOrWhiteSpace(request.Context?.PersonaInstructions))
+            systemPrompt += "\n\n## PERSONA INSTRUCTIONS\n" + request.Context.PersonaInstructions;
+
+        session.UpdateSystemPrompt(systemPrompt);
 
         var userMessageWithContext = BuildUserMessageWithContext(request.Message, request.Context, mode);
-        _log?.Invoke($"[AI] User message with context length: {userMessageWithContext.Length} chars");
 
         try
         {
-            _log?.Invoke("[AI] Calling RunWithHistoryAsync...");
             var response = await _aiHelper.RunWithHistoryAsync(session, userMessageWithContext, 0.7f, ct);
-            _log?.Invoke($"[AI] Got response: {response?.Substring(0, Math.Min(100, response?.Length ?? 0))}...");
 
             // Try to extract a query from the response
             string? suggestedQuery = ExtractQuery(response);
@@ -75,21 +58,18 @@ public class AiHandler
                 SuggestedQuery: suggestedQuery
             );
         }
-        catch (MyUtils.AI.DeviceCodeAuthRequiredException authEx)
+        catch (MyUtils.AI.DeviceCodeAuthRequiredException)
         {
-            _log?.Invoke($"[AI] Device code auth required: {authEx.VerificationUri} code: {authEx.UserCode}");
+            // Token not available - tell extension to authenticate via VS Code
             return new AiChatResponse(
-                Message: $"GitHub authentication required.\n\nVisit: {authEx.VerificationUri}\nEnter code: **{authEx.UserCode}**\n\nAfter authorizing, try your request again.",
+                Message: "GitHub authentication required. Please sign in to GitHub in VS Code.",
                 SessionId: sessionId,
                 SuggestedQuery: null,
-                AuthRequired: true,
-                AuthUrl: authEx.VerificationUri,
-                AuthCode: authEx.UserCode
+                AuthRequired: true
             );
         }
         catch (Exception ex)
         {
-            _log?.Invoke($"[AI] Exception: {ex.GetType().Name}: {ex.Message}");
             return new AiChatResponse(
                 Message: $"AI request failed: {ex.Message}",
                 SessionId: sessionId,
@@ -153,7 +133,7 @@ public class AiHandler
                 0.3f,
                 ct);
 
-            _log?.Invoke($"[AI] Vision result: {result}");
+            _log?.Invoke($"[AI] Vision result received ({result?.Length ?? 0} chars)");
             return ParseExtractionResult(result, request.Mode);
         }
         catch (Exception ex)
@@ -538,5 +518,44 @@ You help with Azure Data Explorer Kusto Query Language (KQL) generation and modi
         }
 
         return "QueryResult";
+    }
+
+    /// <summary>
+    /// Sets the GitHub token directly (e.g., restored from extension storage on startup).
+    /// </summary>
+    public bool SetToken(string token)
+    {
+        if (_aiHelper == null || string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
+        _aiHelper.SetGitHubToken(token);
+        return true;
+    }
+
+    /// <summary>
+    /// Clears the stored AI authentication token, forcing re-authentication on next request.
+    /// </summary>
+    public ClearTokenResult ClearToken()
+    {
+        if (_aiHelper == null)
+        {
+            return new ClearTokenResult(Success: false, Error: "AI not configured");
+        }
+
+        try
+        {
+            _aiHelper.ClearStoredToken();
+            // Also clear chat sessions so user gets a fresh start
+            _sessions.Clear();
+            _log?.Invoke("[AI] Token and sessions cleared");
+            return new ClearTokenResult(Success: true, Error: null);
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"[AI] Failed to clear token: {ex.Message}");
+            return new ClearTokenResult(Success: false, Error: ex.Message);
+        }
     }
 }

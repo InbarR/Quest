@@ -86,6 +86,7 @@ export interface AiChatRequest {
         schema?: SchemaInfo;
         favorites?: string[];  // Array of favorite query names and snippets
         recentQueries?: string[];  // Array of recent query snippets
+        personaInstructions?: string;  // Custom persona system prompt
     };
     sessionId?: string;
 }
@@ -95,8 +96,6 @@ export interface AiChatResponse {
     sessionId: string;
     suggestedQuery?: string;
     authRequired?: boolean;
-    authUrl?: string;
-    authCode?: string;
 }
 
 export interface ResultHistoryItem {
@@ -356,6 +355,14 @@ export class SidecarClient {
 
     async extractDataSourceFromImage(request: ExtractDataSourceFromImageRequest): Promise<ExtractedDataSourceInfo> {
         return this.sendRequest('ai/extractFromImage', request, 60000);  // 60s timeout for vision
+    }
+
+    async clearAiToken(): Promise<{ success: boolean; error?: string }> {
+        return this.sendRequest('ai/clearToken', {});
+    }
+
+    async setAiToken(token: string): Promise<{ success: boolean }> {
+        return this.sendRequest('ai/setToken', { token });
     }
 
     // Import from Kusto Explorer

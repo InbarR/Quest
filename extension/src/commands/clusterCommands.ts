@@ -294,7 +294,7 @@ export function registerClusterCommands(
             }, async (progress) => {
                 try {
                     progress.report({ message: `Connecting to ${database}...` });
-                    const result = await client.fetchSchema(clusterUrl!, database!);
+                    const result = await client.fetchSchema(clusterUrl!, database!, true);
 
                     if (result.success) {
                         if (result.tableCount > 0) {

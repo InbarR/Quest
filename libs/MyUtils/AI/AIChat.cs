@@ -684,6 +684,67 @@ namespace MyUtils.AI
                 ct);
         }
 
+        /// <summary>
+        /// Clears the stored GitHub/Copilot token from Windows Credential Manager.
+        /// This forces re-authentication on the next AI request.
+        /// </summary>
+        public void ClearStoredToken()
+        {
+            if (_copilotClient != null)
+            {
+                _copilotClient.ClearStoredToken();
+                _log?.Invoke("Cleared stored AI token", false);
+            }
+        }
+
+        /// <summary>
+        /// Sets the GitHub token directly (e.g., restored from extension storage).
+        /// </summary>
+        public void SetGitHubToken(string token)
+        {
+            if (_copilotClient != null && !string.IsNullOrEmpty(token))
+            {
+                _copilotClient.SetGitHubToken(token);
+            }
+        }
+
+        /// <summary>
+        /// Gets the current GitHub token if available.
+        /// </summary>
+        public string GetGitHubToken()
+        {
+            return _copilotClient?.GetGitHubToken();
+        }
+
+        /// <summary>
+        /// Completes device code authentication by polling for the access token.
+        /// Call this after the user has authorized the device code.
+        /// </summary>
+        public async Task<bool> CompleteDeviceCodeAuthAsync(string deviceCode, int interval, CancellationToken ct = default)
+        {
+            if (_copilotClient == null)
+            {
+                throw new InvalidOperationException("CopilotClient not initialized.");
+            }
+
+            try
+            {
+                var deviceCodeResponse = new DeviceCodeResponse
+                {
+                    device_code = deviceCode,
+                    interval = interval
+                };
+                var token = await _copilotClient.PollForAccessTokenAsync(deviceCodeResponse, ct);
+                _log?.Invoke($"Device code auth completed successfully", false);
+                return !string.IsNullOrEmpty(token);
+            }
+            catch (Exception ex)
+            {
+                _log?.Invoke($"Device code auth failed: {ex.Message}", true);
+                return false;
+            }
+        }
+
         public static int EstimateTokens(string text)
         {
             if (string.IsNullOrEmpty(text)) return 0;

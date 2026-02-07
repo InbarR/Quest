@@ -105,8 +105,6 @@ public class PresetHandler
         var clusterUrl = cluster?.Cluster;
         var database = cluster?.DB;
 
-        log?.Invoke($"  Preset '{p.PresetName}': Clusters={p.Clusters?.Length ?? 0}, ClusterUrl={clusterUrl ?? "(null)"}, DB={database ?? "(null)"}");
-
         return new PresetInfo(
             Id: GetPresetId(p),
             Name: p.PresetName ?? "Untitled",
