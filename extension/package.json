@@ -511,22 +511,22 @@
           "group": "navigation@1"
         },
         {
-          "command": "queryStudio.runQueryAlternate",
+          "command": "queryStudio.showExample",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@2"
         },
         {
-          "command": "queryStudio.aiChat",
+          "command": "queryStudio.runQueryAlternate",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@3"
         },
         {
-          "command": "queryStudio.saveAsPreset",
+          "command": "queryStudio.aiChat",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@4"
         },
         {
-          "command": "queryStudio.showExample",
+          "command": "queryStudio.saveAsPreset",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@5"
         }
