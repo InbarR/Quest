@@ -71,8 +71,11 @@ public record AiContext(
     string? Database = null,
     string[]? Favorites = null,
     string[]? RecentQueries = null,
-    string? PersonaInstructions = null
+    string? PersonaInstructions = null,
+    string? SystemPromptOverride = null
 );
+public record GetSystemPromptRequest(string? Mode = null);
+public record GetSystemPromptResponse(string SystemPrompt);
 public record AiChatResponse(
     string Message,
     string SessionId,

@@ -40,6 +40,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     private _activeClusterType?: 'kusto' | 'ado' | 'outlook';
     private _inputHistory: string[] = [];
     private _currentPersona: string = '';
+    private _customSystemPrompt: string | undefined;
     private static readonly INPUT_HISTORY_KEY = 'aiChat.inputHistory';
     private static readonly INPUT_HISTORY_MAX = 100;
 
@@ -336,6 +337,27 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             case 'managePersonas':
                 vscode.commands.executeCommand('queryStudio.manageAiPersonas');
                 break;
+            case 'getSystemPrompt':
+                try {
+                    const defaultPrompt = await this.client.getSystemPrompt(this._currentMode);
+                    this._view?.webview.postMessage({
+                        command: 'systemPrompt',
+                        prompt: this._customSystemPrompt ?? defaultPrompt,
+                        isCustom: !!this._customSystemPrompt,
+                        defaultPrompt
+                    });
+                } catch (e) {
+                    this.outputChannel.appendLine(`[AI Chat] Failed to get system prompt: ${e}`);
+                }
+                break;
+            case 'updateSystemPrompt':
+                this._customSystemPrompt = message.prompt || undefined;
+                this.outputChannel.appendLine(`[AI Chat] System prompt ${this._customSystemPrompt ? 'customized' : 'reset to default'}`);
+                this._view?.webview.postMessage({
+                    command: 'systemPromptSaved',
+                    isCustom: !!this._customSystemPrompt
+                });
+                break;
         }
     }
 
@@ -448,7 +470,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     currentQuery,
                     favorites: favorites.length > 0 ? favorites : undefined,
                     recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
-                    personaInstructions: personaPrompt
+                    personaInstructions: personaPrompt,
+                    systemPromptOverride: this._customSystemPrompt
                 }
             });
 
@@ -466,7 +489,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                             currentQuery,
                             favorites: favorites.length > 0 ? favorites : undefined,
                             recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
-                            personaInstructions: personaPrompt
+                            personaInstructions: personaPrompt,
+                            systemPromptOverride: this._customSystemPrompt
                         }
                     });
                 } else {
@@ -846,6 +870,83 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-disabledForeground);
             text-align: center;
         }
+        .system-prompt-chip {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            cursor: pointer;
+            transition: background 0.1s;
+            margin-left: auto;
+        }
+        .system-prompt-chip:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .system-prompt-chip.custom {
+            background: var(--vscode-testing-iconPassed, #4caf50);
+        }
+        .system-prompt-panel {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--vscode-dropdown-background);
+            border: none;
+            z-index: 100;
+            flex-direction: column;
+        }
+        .system-prompt-panel.visible {
+            display: flex;
+        }
+        .system-prompt-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-sideBarSectionHeader-background);
+        }
+        .system-prompt-panel-header .sp-actions {
+            display: flex;
+            gap: 4px;
+        }
+        .system-prompt-panel-header button {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            padding: 2px 8px;
+            border-radius: 2px;
+            font-size: 10px;
+            cursor: pointer;
+        }
+        .system-prompt-panel-header button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .system-prompt-panel-header button.primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .system-prompt-textarea {
+            flex: 1;
+            padding: 8px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: none;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 11px;
+            line-height: 1.4;
+            resize: none;
+            outline: none;
+        }
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -1127,6 +1228,19 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 <div id="historyContent" class="context-dropdown-empty">No history</div>
             </div>
         </div>
+        <div class="context-chip-wrapper" style="margin-left:auto">
+            <span class="system-prompt-chip" id="systemPromptChip" onclick="toggleSystemPrompt()" title="View or customize the AI system prompt">System Prompt</span>
+            <div class="system-prompt-panel" id="systemPromptPanel">
+                <div class="system-prompt-panel-header">
+                    <span>System Prompt</span>
+                    <div class="sp-actions">
+                        <button onclick="resetSystemPrompt()" title="Reset to default">Reset</button>
+                        <button class="primary" onclick="saveSystemPrompt()">Save</button>
+                    </div>
+                </div>
+                <textarea class="system-prompt-textarea" id="systemPromptTextarea" placeholder="Loading..."></textarea>
+            </div>
+        </div>
     </div>
     <div class="chat-container" id="chatContainer"></div>
     <div class="typing-indicator" id="typingIndicator">Thinking...</div>
@@ -1159,6 +1273,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         let modeIcon = 'K';
         let suggestions = [];
         let currentPersona = null;
+        let systemPromptDefault = '';
 
         window.addEventListener('message', event => {
             const msg = event.data;
@@ -1186,6 +1301,14 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                         messageHistory = msg.history;
                         historyIndex = messageHistory.length;
                     }
+                    break;
+                case 'systemPrompt':
+                    systemPromptDefault = msg.defaultPrompt || '';
+                    document.getElementById('systemPromptTextarea').value = msg.prompt || '';
+                    updateSystemPromptChip(msg.isCustom);
+                    break;
+                case 'systemPromptSaved':
+                    updateSystemPromptChip(msg.isCustom);
                     break;
             }
         });
@@ -1260,6 +1383,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             const dropdowns = ['dropdownEditor', 'dropdownFavorites', 'dropdownHistory'];
             const targetId = 'dropdown' + type.charAt(0).toUpperCase() + type.slice(1);
 
+            document.getElementById('systemPromptPanel').classList.remove('visible');
             dropdowns.forEach(id => {
                 const dropdown = document.getElementById(id);
                 if (id === targetId) {
@@ -1301,6 +1425,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
         function closeAllDropdowns() {
             document.querySelectorAll('.context-dropdown').forEach(d => d.classList.remove('visible'));
+            document.getElementById('systemPromptPanel').classList.remove('visible');
         }
 
         // Close dropdowns when clicking outside
@@ -1338,6 +1463,35 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
 
         function managePersonas() {
             vscode.postMessage({ command: 'managePersonas' });
+        }
+
+        function toggleSystemPrompt() {
+            const panel = document.getElementById('systemPromptPanel');
+            closeAllDropdowns();
+            if (panel.classList.contains('visible')) {
+                panel.classList.remove('visible');
+            } else {
+                vscode.postMessage({ command: 'getSystemPrompt' });
+                panel.classList.add('visible');
+            }
+        }
+
+        function saveSystemPrompt() {
+            const text = document.getElementById('systemPromptTextarea').value.trim();
+            const isDefault = text === systemPromptDefault.trim();
+            vscode.postMessage({ command: 'updateSystemPrompt', prompt: isDefault ? '' : text });
+            document.getElementById('systemPromptPanel').classList.remove('visible');
+        }
+
+        function resetSystemPrompt() {
+            document.getElementById('systemPromptTextarea').value = systemPromptDefault;
+            vscode.postMessage({ command: 'updateSystemPrompt', prompt: '' });
+        }
+
+        function updateSystemPromptChip(isCustom) {
+            const chip = document.getElementById('systemPromptChip');
+            chip.classList.toggle('custom', isCustom);
+            chip.title = isCustom ? 'System prompt customized - click to edit' : 'View or customize the AI system prompt';
         }
 
         function renderMessages() {

@@ -843,6 +843,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         .toolbar button:hover {
             background: var(--vscode-button-secondaryHoverBackground);
         }
+        .toolbar button.active {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
         .separator {
             width: 1px;
             height: 14px;
@@ -2868,6 +2872,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 document.getElementById('contextMenu').style.display = 'none';
                 document.getElementById('tabContextMenu').style.display = 'none';
             }
+            if (e.key === 'F12') {
+                e.preventDefault();
+                document.getElementById('filterInput').focus();
+            }
             if (e.key === ' ' && selectedRowIndex >= 0 && !e.target.matches('input, textarea')) {
                 e.preventDefault();
                 toggleRowHighlight(selectedRowIndex);
@@ -3042,10 +3050,18 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             if (chartVisible) {
                 container.style.display = 'none';
                 chartContainer.classList.add('visible');
+                pivotVisible = false;
+                document.getElementById('pivotContainer').classList.remove('visible');
+                document.getElementById('pivotBtn').classList.remove('active');
+                compareVisible = false;
+                document.getElementById('compareContainer').classList.remove('visible');
+                document.getElementById('compareBtn').classList.remove('active');
+                document.getElementById('chartBtn').classList.add('active');
                 renderChart();
             } else {
                 container.style.display = 'block';
                 chartContainer.classList.remove('visible');
+                document.getElementById('chartBtn').classList.remove('active');
             }
         }
 
@@ -3180,10 +3196,16 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 chartContainer.classList.remove('visible');
                 pivotContainer.classList.add('visible');
                 chartVisible = false;
+                document.getElementById('chartBtn').classList.remove('active');
+                compareVisible = false;
+                document.getElementById('compareContainer').classList.remove('visible');
+                document.getElementById('compareBtn').classList.remove('active');
+                document.getElementById('pivotBtn').classList.add('active');
                 populatePivotFields();
             } else {
                 container.style.display = 'block';
                 pivotContainer.classList.remove('visible');
+                document.getElementById('pivotBtn').classList.remove('active');
             }
         }
 
@@ -3330,6 +3352,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             document.getElementById('compareContainer').classList.add('visible');
             chartVisible = false;
             pivotVisible = false;
+            document.getElementById('chartBtn').classList.remove('active');
+            document.getElementById('pivotBtn').classList.remove('active');
+            document.getElementById('compareBtn').classList.add('active');
 
             populateCompareSelects();
         }
@@ -3338,6 +3363,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             compareVisible = false;
             document.getElementById('compareContainer').classList.remove('visible');
             document.getElementById('container').style.display = 'block';
+            document.getElementById('compareBtn').classList.remove('active');
         }
 
         function populateCompareSelects() {

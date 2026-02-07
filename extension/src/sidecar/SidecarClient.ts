@@ -87,6 +87,7 @@ export interface AiChatRequest {
         favorites?: string[];  // Array of favorite query names and snippets
         recentQueries?: string[];  // Array of recent query snippets
         personaInstructions?: string;  // Custom persona system prompt
+        systemPromptOverride?: string;  // Full system prompt override
     };
     sessionId?: string;
 }
@@ -344,6 +345,11 @@ export class SidecarClient {
     }
 
     // AI (longer timeout for AI requests - 120 seconds)
+    async getSystemPrompt(mode: string): Promise<string> {
+        const result = await this.sendRequest<{ systemPrompt: string }>('ai/getSystemPrompt', { mode });
+        return result.systemPrompt;
+    }
+
     async aiChat(request: AiChatRequest): Promise<AiChatResponse> {
         return this.sendRequest('ai/chat', request, 120000);
     }

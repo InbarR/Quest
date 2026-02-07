@@ -283,6 +283,7 @@ public class SimpleJsonRpcServer
                 "schema/clearCache" => ClearSchemaCache(paramsElement),
                 "schema/cacheStats" => GetSchemaCacheStats(),
                 "schema/completions" => GetCompletions(paramsElement),
+                "ai/getSystemPrompt" => GetSystemPrompt(paramsElement),
                 "ai/chat" => await AiChatAsync(paramsElement, ct),
                 "ai/generateTitle" => await GenerateTitleAsync(paramsElement, ct),
                 "ai/extractFromImage" => await ExtractFromImageAsync(paramsElement, ct),
@@ -437,6 +438,13 @@ public class SimpleJsonRpcServer
         var clusterUrl = p.TryGetProperty("clusterUrl", out var cu) ? cu.GetString() : null;
         var database = p.TryGetProperty("database", out var db) ? db.GetString() : null;
         return _schema.GetCompletions(query, position, clusterUrl, database);
+    }
+
+    private GetSystemPromptResponse GetSystemPrompt(JsonElement p)
+    {
+        var mode = p.TryGetProperty("mode", out var modeEl) ? modeEl.GetString() ?? "kusto" : "kusto";
+        var prompt = AiHandler.GetSystemPrompt(mode);
+        return new GetSystemPromptResponse(prompt);
     }
 
     private async Task<AiChatResponse> AiChatAsync(JsonElement p, CancellationToken ct)

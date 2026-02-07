@@ -36,7 +36,9 @@ public class AiHandler
         }
 
         var mode = request.Mode ?? "kusto";
-        var systemPrompt = GetSystemPrompt(mode);
+        var systemPrompt = !string.IsNullOrWhiteSpace(request.Context?.SystemPromptOverride)
+            ? request.Context.SystemPromptOverride
+            : GetSystemPrompt(mode);
 
         if (!string.IsNullOrWhiteSpace(request.Context?.PersonaInstructions))
             systemPrompt += "\n\n## PERSONA INSTRUCTIONS\n" + request.Context.PersonaInstructions;
@@ -258,7 +260,7 @@ If you cannot find a value, set it to null. Set confidence between 0.0-1.0 based
     /// System prompt contains only instructions - no context data.
     /// Mode-specific prompts for KQL, WIQL, and OQL.
     /// </summary>
-    private static string GetSystemPrompt(string mode)
+    public static string GetSystemPrompt(string mode)
     {
         return mode switch
         {
