@@ -37,4 +37,7 @@ tmpclaude-*
 backlog/
 
 # Claude settings (local)
-.claude/settings.local.json
+**/.claude/
+
+# Sidecar (local dev artifact)
+extension/sidecar/
