@@ -36,8 +36,9 @@ tmpclaude-*
 # Backlog (local task tracking)
 backlog/
 
-# Claude settings (local)
+# Claude (local)
 **/.claude/
+CLAUDE.md
 
 # Sidecar (local dev artifact)
 extension/sidecar/
