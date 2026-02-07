@@ -131,6 +131,8 @@ let activeClusterUrl: string | undefined;
 let activeDatabase: string | undefined;
 let activeQueryType: 'kusto' | 'ado' | 'outlook' = 'kusto';
 let statusBarItem: vscode.StatusBarItem | undefined;
+let adoLimitStatusBarItem: vscode.StatusBarItem | undefined;
+let adoMaxResults: number = 200;
 
 interface ConnectionProfile {
     name: string;
@@ -151,6 +153,18 @@ function loadConnectionProfiles() {
 async function saveConnectionProfiles() {
     if (extensionContext) {
         await extensionContext.globalState.update('connectionProfiles', connectionProfiles);
+    }
+}
+
+function loadAdoMaxResults() {
+    if (extensionContext) {
+        adoMaxResults = extensionContext.globalState.get<number>('adoMaxResults', 200);
+    }
+}
+
+async function saveAdoMaxResults() {
+    if (extensionContext) {
+        await extensionContext.globalState.update('adoMaxResults', adoMaxResults);
     }
 }
 
@@ -210,6 +224,27 @@ function updateStatusBar() {
         statusBarItem.tooltip = 'Click to select a data source';
         statusBarItem.show();
     }
+
+    updateAdoLimitStatusBar();
+}
+
+function updateAdoLimitStatusBar() {
+    if (!adoLimitStatusBarItem) {
+        adoLimitStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+        adoLimitStatusBarItem.command = 'queryStudio.setAdoLimit';
+    }
+
+    if (activeQueryType === 'ado') {
+        adoLimitStatusBarItem.text = `$(list-ordered) Top ${adoMaxResults}`;
+        adoLimitStatusBarItem.tooltip = `ADO Results Limit: ${adoMaxResults}\nClick to change`;
+        adoLimitStatusBarItem.show();
+    } else {
+        adoLimitStatusBarItem.hide();
+    }
+}
+
+export function getAdoMaxResults(): number {
+    return adoMaxResults;
 }
 
 export function registerQueryCommands(
@@ -223,6 +258,7 @@ export function registerQueryCommands(
     // Store context for profile management
     extensionContext = context;
     loadConnectionProfiles();
+    loadAdoMaxResults();
 
     // Show Connection Info (for status bar click)
     context.subscriptions.push(
@@ -252,6 +288,56 @@ export function registerQueryCommands(
 
     // Initialize status bar
     updateStatusBar();
+
+    // Set ADO Results Limit
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.setAdoLimit', async () => {
+            const options = [
+                { label: '50', description: 'Return up to 50 work items' },
+                { label: '100', description: 'Return up to 100 work items' },
+                { label: '200', description: 'Return up to 200 work items (default)' },
+                { label: '500', description: 'Return up to 500 work items' },
+                { label: '1000', description: 'Return up to 1,000 work items' },
+                { label: '5000', description: 'Return up to 5,000 work items' },
+                { label: 'Custom...', description: 'Enter a custom limit' }
+            ];
+
+            const selected = await vscode.window.showQuickPick(options, {
+                placeHolder: `Current limit: ${adoMaxResults}`,
+                title: 'Set ADO Results Limit'
+            });
+
+            if (selected) {
+                if (selected.label === 'Custom...') {
+                    const custom = await vscode.window.showInputBox({
+                        prompt: 'Enter maximum number of work items to return',
+                        value: adoMaxResults.toString(),
+                        validateInput: (value) => {
+                            const num = parseInt(value);
+                            if (isNaN(num) || num < 1) {
+                                return 'Please enter a positive number';
+                            }
+                            if (num > 20000) {
+                                return 'Maximum allowed is 20,000';
+                            }
+                            return undefined;
+                        }
+                    });
+                    if (custom) {
+                        adoMaxResults = parseInt(custom);
+                        updateAdoLimitStatusBar();
+                        saveAdoMaxResults();
+                        vscode.window.showInformationMessage(`ADO limit set to ${adoMaxResults}`);
+                    }
+                } else {
+                    adoMaxResults = parseInt(selected.label);
+                    updateAdoLimitStatusBar();
+                    saveAdoMaxResults();
+                    vscode.window.showInformationMessage(`ADO limit set to ${adoMaxResults}`);
+                }
+            }
+        })
+    );
 
     // Save current connection as profile
     context.subscriptions.push(
@@ -450,13 +536,15 @@ export function registerQueryCommands(
                 vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', true);
 
                 const config = vscode.workspace.getConfiguration('queryStudio');
+                // Use ADO-specific limit for ADO queries, otherwise use global setting
+                const maxResults: number = queryType === 'ado' ? adoMaxResults : (config.get<number>('maxResults') || 10000);
                 const request: QueryRequest = {
                     query: query,
                     clusterUrl: queryType === 'outlook' ? '' : (activeClusterUrl || ''),
                     database: queryType === 'outlook' ? '' : (activeDatabase || ''),
                     type: queryType,
                     timeout: config.get('queryTimeout') || 300,
-                    maxResults: config.get('maxResults') || 10000
+                    maxResults: maxResults
                 };
 
                 // Execute query asynchronously (don't await) to allow concurrent queries

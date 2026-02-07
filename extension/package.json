@@ -254,6 +254,12 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.setAdoLimit",
+        "title": "Set ADO Results Limit",
+        "icon": "$(list-ordered)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.refreshClusters",
         "title": "Refresh Data Sources",
         "icon": "$(refresh)",
@@ -541,6 +547,11 @@
           "command": "queryStudio.saveAsPreset",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@4"
+        },
+        {
+          "command": "queryStudio.setAdoLimit",
+          "when": "editorLangId == wiql",
+          "group": "navigation@5"
         }
       ],
       "editor/context": [
