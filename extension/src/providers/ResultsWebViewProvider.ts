@@ -1876,7 +1876,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         <button onclick="clearColorRules()" id="clearColorsBtn" style="display:none;" title="Clear all color rules">🎨 Clear Colors</button>
         <div class="filter-group">
             <span style="font-size:11px;">🔍</span>
-            <input type="text" class="filter-input" id="filterInput" placeholder="col::value or text..." oninput="debounceFilter(this.value)" title="Filter: text (all cols), col::val (column filter), ::col (highlight), !pat (exclude)">
+            <input type="text" class="filter-input" id="filterInput" placeholder="F12 to filter" oninput="debounceFilter(this.value)" title="Filter: text (all cols), col::val (column filter), ::col (highlight), !pat (exclude)">
+            <button onclick="showFilterHelp()" style="padding:2px 6px;" title="Filter syntax help">?</button>
             <button onclick="toggleFilterMode()" id="filterModeBtn" style="padding:2px 6px;" title="Mode: Filter rows (click to switch to Highlight)">🔽</button>
             <button onclick="clearFilter()" style="padding:2px 4px;">✕</button>
             <button onclick="searchAllTabs()" style="padding:2px 6px;" title="Search across all result tabs">🔎 All</button>
@@ -2447,7 +2448,26 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 }
             }
         }
-        function showFilterHelp() { alert('Filter Syntax:\\n\\n• text: search all columns\\n• col::val: filter column by value\\n• ::col: highlight column\\n• !pat: exclude matches\\n• Regex supported'); }
+        function showFilterHelp() {
+            const helpHtml = \`
+                <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="this.remove()">
+                    <div style="background:var(--vscode-editor-background);border:1px solid var(--vscode-widget-border);border-radius:8px;padding:20px;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,0.3);" onclick="event.stopPropagation()">
+                        <h3 style="margin:0 0 15px 0;color:var(--vscode-foreground);">🔍 Filter Syntax</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">text</td><td style="padding:6px 0;">Search all columns</td></tr>
+                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">col::value</td><td style="padding:6px 0;">Filter specific column</td></tr>
+                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">::col</td><td style="padding:6px 0;">Highlight column</td></tr>
+                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">!pattern</td><td style="padding:6px 0;">Exclude matches</td></tr>
+                            <tr><td style="padding:6px 10px 6px 0;color:var(--vscode-textLink-foreground);font-family:monospace;">a.*b</td><td style="padding:6px 0;">Regex supported</td></tr>
+                        </table>
+                        <div style="margin-top:15px;text-align:right;">
+                            <button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding:6px 16px;cursor:pointer;">Got it</button>
+                        </div>
+                    </div>
+                </div>
+            \`;
+            document.body.insertAdjacentHTML('beforeend', helpHtml);
+        }
         function toggleFilterMode() {
             filterMode = filterMode === 'filter' ? 'highlight' : 'filter';
             const btn = document.getElementById('filterModeBtn');
