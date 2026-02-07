@@ -2,6 +2,22 @@
 
 All notable changes to the "Quest" extension will be documented in this file.
 
+## [0.5.6] - 2026-02-07
+
+### Added
+
+- **Run Submenu** - Combined Run Query and Run in Same Tab into a single dropdown menu
+- **VS Code Marketplace Badge** - Added clickable marketplace link to README
+
+### Changed
+
+- **Show Example Button** - Moved to visible toolbar position (was hidden in overflow menu)
+- **Toolbar Layout** - Reorganized for better visibility of common actions
+
+### Fixed
+
+- **Run Query Tooltip** - Removed duplicate "F5" from tooltip (VS Code adds it automatically)
+
 ## [0.5.5] - 2026-02-07
 
 ### Added
