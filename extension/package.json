@@ -193,7 +193,7 @@
       },
       {
         "command": "queryStudio.runQuery",
-        "title": "Run Query (F5)",
+        "title": "Run Query",
         "shortTitle": "Run",
         "icon": "$(rocket)",
         "category": "Quest"
@@ -516,19 +516,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "queryStudio.runQueryAlternate",
+          "command": "queryStudio.aiChat",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@3"
         },
         {
-          "command": "queryStudio.aiChat",
+          "command": "queryStudio.saveAsPreset",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@4"
         },
         {
-          "command": "queryStudio.saveAsPreset",
+          "command": "queryStudio.runQueryAlternate",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "navigation@5"
+          "group": "1_run"
         }
       ],
       "editor/context": [
