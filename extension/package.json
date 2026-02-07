@@ -498,7 +498,24 @@
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
       }
     ],
+    "submenus": [
+      {
+        "id": "queryStudio.runSubmenu",
+        "label": "Run Query",
+        "icon": "$(run)"
+      }
+    ],
     "menus": {
+      "queryStudio.runSubmenu": [
+        {
+          "command": "queryStudio.runQuery",
+          "group": "1_run@1"
+        },
+        {
+          "command": "queryStudio.runQueryAlternate",
+          "group": "1_run@2"
+        }
+      ],
       "editor/title": [
         {
           "command": "queryStudio.showPanel",
@@ -506,7 +523,7 @@
           "group": "navigation@0"
         },
         {
-          "command": "queryStudio.runQuery",
+          "submenu": "queryStudio.runSubmenu",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@1"
         },
@@ -524,11 +541,6 @@
           "command": "queryStudio.saveAsPreset",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
           "group": "navigation@4"
-        },
-        {
-          "command": "queryStudio.runQueryAlternate",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "1_run"
         }
       ],
       "editor/context": [
