@@ -287,7 +287,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _openBugReport() {
-        const version = '0.5.1';
+        const version = vscode.extensions.getExtension('inbar-rotem.quest')?.packageJSON.version ?? 'unknown';
         const title = encodeURIComponent('Bug: ');
         const body = encodeURIComponent(`## Description\n\n\n\n## Steps to Reproduce\n\n1. \n2. \n3. \n\n## Expected Behavior\n\n\n\n## Actual Behavior\n\n\n\n---\n**Environment:**\n- Quest: v${version}\n- VS Code: ${vscode.version}\n- OS: ${process.platform}`);
         const issueUrl = `https://github.com/InbarR/Quest/issues/new?title=${title}&body=${body}`;
@@ -3802,7 +3802,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         });
     </script>
     <div class="footer">
-        <span><span class="brand">Quest</span> v0.5.1 | by Inbar Rotem</span>
+        <span><span class="brand">Quest</span> v${vscode.extensions.getExtension('inbar-rotem.quest')?.packageJSON.version ?? ''} | by Inbar Rotem</span>
         <span>
             <span class="bug-report" onclick="reportBug()" title="Report a bug or send feedback">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">

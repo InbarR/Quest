@@ -362,7 +362,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _openFeedback() {
-        const version = '0.5.1';
+        const version = vscode.extensions.getExtension('inbar-rotem.quest')?.packageJSON.version ?? 'unknown';
         const title = encodeURIComponent('Feedback: ');
         const body = encodeURIComponent(`## Description\n\n\n\n---\n**Environment:**\n- Quest: v${version}\n- VS Code: ${vscode.version}\n- OS: ${process.platform}`);
         const issueUrl = `https://github.com/InbarR/Quest/issues/new?title=${title}&body=${body}`;

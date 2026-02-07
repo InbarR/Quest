@@ -2,6 +2,31 @@
 
 All notable changes to the "Quest" extension will be documented in this file.
 
+## [0.5.5] - 2026-02-07
+
+### Added
+
+- **Active View Mode Buttons** - Chart, Pivot, and Compare buttons now highlight when active with mutual exclusion
+- **F12 Filter Focus** - Press F12 in results view to jump to the filter input
+- **AI System Prompt Editor** - View and customize the AI system prompt from the chat context bar
+- **Dynamic Version Display** - Footer version is now read from package.json instead of hardcoded
+
+### Fixed
+
+- Version display in results footer and bug report links now always matches the installed version
+
+## [0.5.2] - 2026-02-04
+
+### Changed
+
+- Use VS Code built-in GitHub auth for AI chat
+
+## [0.5.1] - 2026-02-04
+
+### Changed
+
+- Bump version for marketplace metadata updates
+
 ## [0.5.0] - 2025-02-03
 
 ### Added
