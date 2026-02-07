@@ -2,6 +2,7 @@
 
 A powerful VS Code extension for querying multiple data sources with AI assistance. Query Azure Data Explorer (KQL), Azure DevOps work items (WIQL), and local Outlook (OQL) from a unified interface.
 
+[![VS Code Marketplace](https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=inbar-rotem.quest)
 ![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue.svg)
 ![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
