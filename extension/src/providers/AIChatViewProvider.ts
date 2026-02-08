@@ -460,12 +460,16 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             let availableTables: string[] | undefined;
             try {
                 const conn = getActiveConnection();
+                this.outputChannel.appendLine(`[AI Chat] Connection: cluster=${conn.clusterUrl}, db=${conn.database}, mode=${this._currentMode}`);
                 if (conn.clusterUrl && conn.database && this._currentMode === 'kusto') {
                     const schema = await this.client.getSchema(conn.clusterUrl, conn.database);
+                    this.outputChannel.appendLine(`[AI Chat] Schema fetched: ${schema.tables?.length || 0} tables`);
                     if (schema.tables && schema.tables.length > 0) {
                         availableTables = schema.tables.map(t => t.name);
-                        this.outputChannel.appendLine(`[AI Chat] Including ${availableTables.length} tables from schema`);
+                        this.outputChannel.appendLine(`[AI Chat] Including tables: ${availableTables.slice(0, 10).join(', ')}...`);
                     }
+                } else {
+                    this.outputChannel.appendLine(`[AI Chat] Skipping schema: no connection or not kusto mode`);
                 }
             } catch (e) {
                 this.outputChannel.appendLine(`[AI Chat] Failed to load schema for context: ${e}`);

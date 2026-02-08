@@ -368,11 +368,12 @@ You help with Azure DevOps Work Item Query Language (WIQL) queries.
 ## YOUR ROLE
 You help with Azure Data Explorer Kusto Query Language (KQL) generation and modification.
 
-## CRITICAL: TABLE SELECTION
-When generating queries, ALWAYS check the '## AVAILABLE TABLES' section and use the most relevant table:
-- Match table names to the user's request (e.g., 'tenants' -> look for tables with 'Tenant' in the name)
-- Prefer exact name matches over partial matches
-- Do NOT default to tables from favorites if a better matching table exists in AVAILABLE TABLES
+## CRITICAL: TABLE SELECTION (READ THIS FIRST!)
+When generating queries:
+1. ALWAYS scan the '## AVAILABLE TABLES' section for the best matching table name
+2. Match keywords from user's request to table names (e.g., user says 'tenants' -> use a table with 'Tenant' in name)
+3. IGNORE favorites when choosing tables - favorites are just examples, not suggestions for which table to use
+4. Only use a table from favorites if no better match exists in AVAILABLE TABLES
 
 ## INSTRUCTIONS
 1. If the user provides a '## USER KQL' block, treat it as the CURRENT QUERY and modify it.
@@ -413,8 +414,10 @@ When generating queries, ALWAYS check the '## AVAILABLE TABLES' section and use 
         // Add available tables FIRST - this is critical for table selection
         if (context?.AvailableTables != null && context.AvailableTables.Length > 0)
         {
-            sb.AppendLine("## AVAILABLE TABLES");
-            sb.AppendLine("These are the tables in the connected database. Use the most relevant table for the user's request:");
+            sb.AppendLine("## AVAILABLE TABLES (USE THESE!)");
+            sb.AppendLine("IMPORTANT: Pick the table whose name best matches the user's request. DO NOT default to tables from favorites.");
+            sb.AppendLine("For example: if user asks about 'tenants', look for tables with 'Tenant' in the name.");
+            sb.AppendLine();
             // Show up to 100 tables
             var tablesToShow = context.AvailableTables.Take(100);
             sb.AppendLine(string.Join(", ", tablesToShow));
