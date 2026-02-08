@@ -177,10 +177,21 @@ export class SidecarManager {
 
         // Use bundled sidecar
         const platform = process.platform;
+        const arch = process.arch;
         const execName = platform === 'win32' ? 'QueryStudio.Server.exe' : 'QueryStudio.Server';
-        const runtimeId = platform === 'win32' ? 'win-x64' : (platform === 'darwin' ? 'osx-x64' : 'linux-x64');
 
-        // Try extension path first, then check relative to MyTools
+        // Determine runtime ID based on platform and architecture
+        let runtimeId: string;
+        if (platform === 'win32') {
+            runtimeId = arch === 'arm64' ? 'win-arm64' : 'win-x64';
+        } else if (platform === 'darwin') {
+            runtimeId = arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+        } else {
+            runtimeId = arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+        }
+
+        // Try platform-specific bundled path first, then generic
+        const bundledPlatformPath = path.join(this.context.extensionPath, 'server', runtimeId, execName);
         const bundledPath = path.join(this.context.extensionPath, 'server', execName);
 
         // For development: debug build path (preferred for debugging)
@@ -192,7 +203,7 @@ export class SidecarManager {
         // For development: check parent directory (published output)
         const devPublishPath = path.join(this.context.extensionPath, '..', 'server', 'bin', 'Release', 'net8.0', runtimeId, 'publish', execName);
 
-        // For dev: prefer debug > release > published > bundled
+        // For dev: prefer debug > release > published > bundled (platform-specific) > bundled (generic)
         const fs = require('fs');
         if (fs.existsSync(devDebugPath)) {
             this.outputChannel.appendLine(`Using debug build: ${devDebugPath}`);
@@ -205,12 +216,16 @@ export class SidecarManager {
         if (fs.existsSync(devPublishPath)) {
             return devPublishPath;
         }
+        if (fs.existsSync(bundledPlatformPath)) {
+            this.outputChannel.appendLine(`Using platform-specific build (${runtimeId}): ${bundledPlatformPath}`);
+            return bundledPlatformPath;
+        }
         if (fs.existsSync(bundledPath)) {
             return bundledPath;
         }
 
-        // Fallback
-        return bundledPath;
+        // Fallback - prefer platform-specific
+        return bundledPlatformPath;
     }
 
     async stop(): Promise<void> {

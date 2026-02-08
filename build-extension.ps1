@@ -13,27 +13,41 @@ Write-Host "=== Building Query Studio Extension ===" -ForegroundColor Cyan
 
 # Build the server
 if (-not $SkipServer) {
-    Write-Host "`n[1/4] Building server..." -ForegroundColor Yellow
+    Write-Host "`n[1/4] Building server for all platforms..." -ForegroundColor Yellow
 
     $serverDir = Join-Path $scriptDir "server"
-    $serverOutput = Join-Path (Join-Path $scriptDir "extension") "server"
+    $serverBaseOutput = Join-Path (Join-Path $scriptDir "extension") "server"
 
     # Clean previous build
-    if (Test-Path $serverOutput) {
-        Remove-Item -Recurse -Force $serverOutput
+    if (Test-Path $serverBaseOutput) {
+        Remove-Item -Recurse -Force $serverBaseOutput
     }
-    New-Item -ItemType Directory -Force -Path $serverOutput | Out-Null
 
-    # Build self-contained single-file executable
+    # Build for each platform
+    $platforms = @(
+        @{ rid = "win-x64"; name = "Windows x64" },
+        @{ rid = "osx-x64"; name = "macOS Intel" },
+        @{ rid = "osx-arm64"; name = "macOS Apple Silicon" }
+    )
+
     Push-Location $serverDir
     try {
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $serverOutput
+        foreach ($platform in $platforms) {
+            $rid = $platform.rid
+            $name = $platform.name
+            $serverOutput = Join-Path $serverBaseOutput $rid
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "Server build failed"
+            Write-Host "  Building for $name ($rid)..." -ForegroundColor Cyan
+            New-Item -ItemType Directory -Force -Path $serverOutput | Out-Null
+
+            dotnet publish -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $serverOutput
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Server build failed for $rid"
+            }
         }
 
-        Write-Host "Server built successfully to: $serverOutput" -ForegroundColor Green
+        Write-Host "Server built successfully for all platforms" -ForegroundColor Green
     }
     finally {
         Pop-Location
