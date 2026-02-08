@@ -694,16 +694,17 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.showKeyboardShortcuts', () => {
             const shortcuts = [
-                { key: 'F5', description: 'Run Query', command: 'queryStudio.runQuery' },
-                { key: 'Ctrl+Enter', description: 'Run Query', command: 'queryStudio.runQuery' },
-                { key: 'Shift+F5', description: 'Cancel Query', command: 'queryStudio.cancelQuery' },
-                { key: 'Ctrl+Shift+S', description: 'Save as Favorite', command: 'queryStudio.saveAsPreset' },
-                { key: 'Ctrl+Shift+A', description: 'Open AI Chat', command: 'queryStudio.aiChat' },
-                { key: 'Ctrl+Shift+M', description: 'Toggle Mode (KQL/WIQL/OQL)', command: 'queryStudio.toggleMode' },
-                { key: 'Ctrl+Shift+/', description: 'Show Keyboard Shortcuts', command: 'queryStudio.showKeyboardShortcuts' },
-                { key: 'Ctrl+Alt+P', description: 'Switch Connection Profile', command: 'queryStudio.switchConnectionProfile' },
-                { key: 'Shift+Alt+F', description: 'Format Document', command: 'editor.action.formatDocument' },
-                { key: 'Ctrl+Space', description: 'Trigger Autocomplete', command: 'editor.action.triggerSuggest' },
+                { key: 'F5', description: 'Run Query (new tab)' },
+                { key: 'Ctrl+Shift+Enter', description: 'Run Query (same tab)' },
+                { key: 'Shift+F5', description: 'Cancel Query' },
+                { key: 'Ctrl+Shift+S', description: 'Save as Favorite' },
+                { key: 'Ctrl+Shift+A', description: 'Open AI Chat' },
+                { key: 'Ctrl+Alt+M', description: 'Toggle Mode (KQL/WIQL/OQL)' },
+                { key: 'Ctrl+Alt+P', description: 'Switch Connection Profile' },
+                { key: 'Ctrl+Alt+V', description: 'Paste Data as Table' },
+                { key: 'Ctrl+Shift+/', description: 'Show Keyboard Shortcuts' },
+                { key: 'Ctrl+Shift+B', description: 'Report Issue' },
+                { key: 'Ctrl+Space', description: 'Trigger Autocomplete' },
             ];
 
             const panel = vscode.window.createWebviewPanel(
