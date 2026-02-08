@@ -288,48 +288,27 @@ export function registerQueryCommands(
     // Set Results Limit (all modes)
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.setResultsLimit', async () => {
-            const options = [
-                { label: '100', description: 'Return up to 100 rows' },
-                { label: '500', description: 'Return up to 500 rows' },
-                { label: '1000', description: 'Return up to 1,000 rows (default)' },
-                { label: '5000', description: 'Return up to 5,000 rows' },
-                { label: '10000', description: 'Return up to 10,000 rows' },
-                { label: 'Custom...', description: 'Enter a custom limit' }
-            ];
-
-            const selected = await vscode.window.showQuickPick(options, {
-                placeHolder: `Current limit: ${maxResultsLimit}`,
-                title: 'Set Results Limit'
+            const input = await vscode.window.showInputBox({
+                prompt: 'Enter maximum number of rows (e.g., 100, 500, 1000, 5000)',
+                value: maxResultsLimit.toString(),
+                title: 'Set Results Limit',
+                validateInput: (value) => {
+                    const num = parseInt(value);
+                    if (isNaN(num) || num < 1) {
+                        return 'Please enter a positive number';
+                    }
+                    if (num > 100000) {
+                        return 'Maximum allowed is 100,000';
+                    }
+                    return undefined;
+                }
             });
 
-            if (selected) {
-                if (selected.label === 'Custom...') {
-                    const custom = await vscode.window.showInputBox({
-                        prompt: 'Enter maximum number of rows to return',
-                        value: maxResultsLimit.toString(),
-                        validateInput: (value) => {
-                            const num = parseInt(value);
-                            if (isNaN(num) || num < 1) {
-                                return 'Please enter a positive number';
-                            }
-                            if (num > 100000) {
-                                return 'Maximum allowed is 100,000';
-                            }
-                            return undefined;
-                        }
-                    });
-                    if (custom) {
-                        maxResultsLimit = parseInt(custom);
-                        updateResultsLimitStatusBar();
-                        saveMaxResultsLimit();
-                        vscode.window.showInformationMessage(`Results limit set to ${maxResultsLimit}`);
-                    }
-                } else {
-                    maxResultsLimit = parseInt(selected.label);
-                    updateResultsLimitStatusBar();
-                    saveMaxResultsLimit();
-                    vscode.window.showInformationMessage(`Results limit set to ${maxResultsLimit}`);
-                }
+            if (input) {
+                maxResultsLimit = parseInt(input);
+                updateResultsLimitStatusBar();
+                saveMaxResultsLimit();
+                vscode.window.showInformationMessage(`Results limit set to ${maxResultsLimit}`);
             }
         })
     );
