@@ -786,8 +786,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Export a function to update the results limit display
     (globalThis as any).questUpdateResultsLimit = (limit: number) => {
-        resultsLimitStatusBarItem.text = `$(list-ordered) ${limit}`;
-        resultsLimitStatusBarItem.tooltip = `Results Limit: ${limit}\nClick to change`;
+        if (limit === 0) {
+            resultsLimitStatusBarItem.text = '$(list-ordered) All';
+            resultsLimitStatusBarItem.tooltip = 'Results Limit: No limit\nClick to change';
+        } else {
+            resultsLimitStatusBarItem.text = `$(list-ordered) ${limit}`;
+            resultsLimitStatusBarItem.tooltip = `Results Limit: ${limit}\nClick to change`;
+        }
     };
 
     // Schema status

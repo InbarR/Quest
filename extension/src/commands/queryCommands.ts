@@ -283,14 +283,19 @@ export function registerQueryCommands(
     // Set Results Limit (all modes)
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.setResultsLimit', async () => {
+            const currentValue = maxResultsLimit === 0 ? '' : maxResultsLimit.toString();
             const input = await vscode.window.showInputBox({
-                prompt: 'Enter maximum number of rows (e.g., 100, 500, 1000, 5000)',
-                value: maxResultsLimit.toString(),
+                prompt: 'Enter maximum rows (leave empty for no limit)',
+                value: currentValue,
                 title: 'Set Results Limit',
+                placeHolder: 'e.g., 1000 or empty for no limit',
                 validateInput: (value) => {
+                    if (value.trim() === '') {
+                        return undefined; // Allow empty = no limit
+                    }
                     const num = parseInt(value);
                     if (isNaN(num) || num < 1) {
-                        return 'Please enter a positive number';
+                        return 'Please enter a positive number or leave empty for no limit';
                     }
                     if (num > 100000) {
                         return 'Maximum allowed is 100,000';
@@ -299,11 +304,18 @@ export function registerQueryCommands(
                 }
             });
 
-            if (input) {
-                maxResultsLimit = parseInt(input);
-                updateResultsLimitStatusBar();
-                saveMaxResultsLimit();
-                vscode.window.showInformationMessage(`Results limit set to ${maxResultsLimit}`);
+            if (input !== undefined) {
+                if (input.trim() === '') {
+                    maxResultsLimit = 0; // 0 means no limit
+                    updateResultsLimitStatusBar();
+                    saveMaxResultsLimit();
+                    vscode.window.showInformationMessage('Results limit removed (no limit)');
+                } else {
+                    maxResultsLimit = parseInt(input);
+                    updateResultsLimitStatusBar();
+                    saveMaxResultsLimit();
+                    vscode.window.showInformationMessage(`Results limit set to ${maxResultsLimit}`);
+                }
             }
         })
     );
