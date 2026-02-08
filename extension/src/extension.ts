@@ -23,7 +23,6 @@ let modeStatusBarItem: vscode.StatusBarItem;
 let connectionStatusBarItem: vscode.StatusBarItem;
 let shortcutsStatusBarItem: vscode.StatusBarItem;
 let logStatusBarItem: vscode.StatusBarItem;
-let schemaStatusBarItem: vscode.StatusBarItem;
 let currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
 let queryCounter = 0;
 let resultsProviderInstance: ResultsWebViewProvider;
@@ -54,20 +53,9 @@ export function updateConnectionStatus(connected: boolean) {
     }
 }
 
-export function updateSchemaStatus(tableCount: number, database?: string) {
-    if (!schemaStatusBarItem) return;
-
-    if (tableCount > 0) {
-        schemaStatusBarItem.text = `$(database) ${tableCount} tables`;
-        schemaStatusBarItem.tooltip = database
-            ? `Schema loaded for ${database}: ${tableCount} tables available for autocomplete`
-            : `Schema loaded: ${tableCount} tables available for autocomplete`;
-        schemaStatusBarItem.backgroundColor = undefined;
-    } else {
-        schemaStatusBarItem.text = '$(database) No schema';
-        schemaStatusBarItem.tooltip = 'No schema loaded. Select a cluster and database to enable table/column autocomplete.';
-        schemaStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-    }
+export function updateSchemaStatus(_tableCount: number, _database?: string) {
+    // Schema status moved to Data Sources view - this is now a no-op
+    // Kept for backwards compatibility with clusterCommands.ts calls
 }
 
 /**
@@ -794,13 +782,6 @@ export async function activate(context: vscode.ExtensionContext) {
             resultsLimitStatusBarItem.tooltip = `Results Limit: ${limit}\nClick to change`;
         }
     };
-
-    // Schema status
-    schemaStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 107);
-    schemaStatusBarItem.command = 'queryStudio.fetchSchema';
-    updateSchemaStatus(0);
-    schemaStatusBarItem.show();
-    context.subscriptions.push(schemaStatusBarItem);
 
     // View external data
     const pasteTableStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 106);

@@ -618,6 +618,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "queryStudio.fetchSchema",
+          "when": "view == querystudio.clusters",
+          "group": "navigation@3"
+        },
+        {
           "command": "queryStudio.addDataSource",
           "when": "view == querystudio.clusters && !queryStudio.isOutlookMode",
           "group": "navigation@2"
