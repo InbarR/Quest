@@ -469,6 +469,12 @@
         "title": "Open File as Table",
         "icon": "$(table)",
         "category": "Quest"
+      },
+      {
+        "command": "queryStudio.viewExternalData",
+        "title": "View Data as Table",
+        "icon": "$(table)",
+        "category": "Quest"
       }
     ],
     "keybindings": [

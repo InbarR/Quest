@@ -797,11 +797,30 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Create paste as table status bar item
     const pasteTableStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
-    pasteTableStatusBarItem.text = '$(clippy) Paste Table';
-    pasteTableStatusBarItem.command = 'queryStudio.pasteAsTable';
-    pasteTableStatusBarItem.tooltip = 'Paste JSON/CSV from clipboard as table (Ctrl+Alt+V)';
+    pasteTableStatusBarItem.text = '$(table) View Data';
+    pasteTableStatusBarItem.command = 'queryStudio.viewExternalData';
+    pasteTableStatusBarItem.tooltip = 'View JSON/CSV data as table';
     pasteTableStatusBarItem.show();
     context.subscriptions.push(pasteTableStatusBarItem);
+
+    // Register the menu command for viewing external data
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.viewExternalData', async () => {
+            const choice = await vscode.window.showQuickPick([
+                { label: '$(clippy) From Clipboard', description: 'Paste JSON/CSV from clipboard', value: 'clipboard' },
+                { label: '$(folder-opened) From File', description: 'Open a JSON/CSV file', value: 'file' }
+            ], {
+                placeHolder: 'How would you like to load the data?',
+                title: 'View Data as Table'
+            });
+
+            if (choice?.value === 'clipboard') {
+                vscode.commands.executeCommand('queryStudio.pasteAsTable');
+            } else if (choice?.value === 'file') {
+                vscode.commands.executeCommand('queryStudio.openTableFromFile');
+            }
+        })
+    );
 
     // Register show log command
     context.subscriptions.push(
