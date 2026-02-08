@@ -38,7 +38,8 @@ export class ClusterTreeItem extends vscode.TreeItem {
 export class DatabaseTreeItem extends vscode.TreeItem {
     constructor(
         public readonly cluster: ClusterInfo,
-        public readonly isActive: boolean = false
+        public readonly isActive: boolean = false,
+        public readonly tableCount: number = 0
     ) {
         super(cluster.database, vscode.TreeItemCollapsibleState.None);
 
@@ -46,13 +47,20 @@ export class DatabaseTreeItem extends vscode.TreeItem {
         this.contextValue = 'database';
 
         let iconColor: vscode.ThemeColor | undefined;
-        let description = '';
+        const parts: string[] = [];
+
         if (isActive) {
             iconColor = new vscode.ThemeColor('charts.green');
-            description = '● Active';
+            parts.push('● Active');
         }
+
+        if (tableCount > 0) {
+            parts.push(`${tableCount} tables`);
+            this.tooltip += `\nSchema: ${tableCount} tables`;
+        }
+
         this.iconPath = new vscode.ThemeIcon('database', iconColor);
-        this.description = description;
+        this.description = parts.join(' · ');
 
         // Click to set as active
         this.command = {
@@ -93,6 +101,7 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
     private clusters: ClusterInfo[] = [];
     private activeCluster: ClusterInfo | null = null;
     private currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private tableCounts: Map<string, number> = new Map(); // key: clusterId or "url|database"
 
     constructor(private client: SidecarClient) {}
 
@@ -116,6 +125,17 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
 
     getActiveCluster(): ClusterInfo | null {
         return this.activeCluster;
+    }
+
+    setTableCount(clusterUrl: string, database: string, count: number): void {
+        const key = `${clusterUrl.toLowerCase()}|${database.toLowerCase()}`;
+        this.tableCounts.set(key, count);
+        this.refresh();
+    }
+
+    getTableCount(clusterUrl: string, database: string): number {
+        const key = `${clusterUrl.toLowerCase()}|${database.toLowerCase()}`;
+        return this.tableCounts.get(key) || 0;
     }
 
     getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
@@ -186,7 +206,8 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
             // Show databases under cluster
             return element.databases.map(db => {
                 const isActive = this.activeCluster?.id === db.id;
-                return new DatabaseTreeItem(db, isActive);
+                const tableCount = this.getTableCount(db.url, db.database);
+                return new DatabaseTreeItem(db, isActive, tableCount);
             });
         }
 

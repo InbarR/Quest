@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, KustoExplorerConnection } from '../sidecar/SidecarClient';
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
 import { setActiveConnection } from './queryCommands';
-import { updateModeStatusBar, getCurrentMode, updateSchemaStatus } from '../extension';
+import { updateModeStatusBar, getCurrentMode } from '../extension';
 import { ClipboardImageCapture } from '../providers/ClipboardImageCapture';
 
 export function registerClusterCommands(
@@ -93,19 +93,14 @@ export function registerClusterCommands(
                     if (result.success && result.tableCount > 0) {
                         console.log(`[Quest] Schema loaded: ${result.tableCount} tables`);
                         vscode.window.setStatusBarMessage(`Loaded ${result.tableCount} tables for autocomplete`, 3000);
-                        updateSchemaStatus(result.tableCount, cluster.database);
+                        clusterProvider.setTableCount(cluster.url, cluster.database, result.tableCount);
                     } else {
                         console.log(`[Quest] Schema fetch result: success=${result.success}, tableCount=${result.tableCount}, error=${result.error}`);
-                        updateSchemaStatus(0);
                     }
                 } catch (err) {
                     console.log(`[Quest] Schema fetch error: ${err}`);
-                    updateSchemaStatus(0);
                     // Schema fetch failed silently - autocomplete will use cached data
                 }
-            } else {
-                // Non-Kusto modes don't have schema
-                updateSchemaStatus(0);
             }
         })
     );
@@ -301,19 +296,16 @@ export function registerClusterCommands(
                             vscode.window.showInformationMessage(
                                 `Schema loaded: ${result.tableCount} tables. Autocomplete is now available.`
                             );
-                            updateSchemaStatus(result.tableCount, database);
+                            clusterProvider.setTableCount(clusterUrl!, database!, result.tableCount);
                         } else {
                             vscode.window.showWarningMessage('No tables found in database.');
-                            updateSchemaStatus(0);
                         }
                     } else {
                         vscode.window.showErrorMessage(`Failed to fetch schema: ${result.error}`);
-                        updateSchemaStatus(0);
                     }
                 } catch (error) {
                     const message = error instanceof Error ? error.message : 'Unknown error';
                     vscode.window.showErrorMessage(`Failed to fetch schema: ${message}`);
-                    updateSchemaStatus(0);
                 }
             });
         })
@@ -343,19 +335,16 @@ export function registerClusterCommands(
                             vscode.window.showInformationMessage(
                                 `Schema refreshed: ${result.tableCount} tables.`
                             );
-                            updateSchemaStatus(result.tableCount, activeCluster.database);
+                            clusterProvider.setTableCount(activeCluster.url, activeCluster.database, result.tableCount);
                         } else {
                             vscode.window.showWarningMessage('No tables found in database.');
-                            updateSchemaStatus(0);
                         }
                     } else {
                         vscode.window.showErrorMessage(`Failed to refresh schema: ${result.error}`);
-                        updateSchemaStatus(0);
                     }
                 } catch (error) {
                     const message = error instanceof Error ? error.message : 'Unknown error';
                     vscode.window.showErrorMessage(`Failed to refresh schema: ${message}`);
-                    updateSchemaStatus(0);
                 }
             });
         })
