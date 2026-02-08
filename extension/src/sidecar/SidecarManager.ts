@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { SidecarClient } from './SidecarClient';
 
 export class SidecarManager {
@@ -85,6 +85,11 @@ export class SidecarManager {
         if (fs.existsSync(sidecarPath)) {
             const stats = fs.statSync(sidecarPath);
             this.outputChannel.appendLine(`Server exe modified: ${stats.mtime.toISOString()}`);
+
+            // On macOS/Linux, ensure the binary is executable
+            if (process.platform !== 'win32') {
+                this.ensureExecutable(sidecarPath);
+            }
         } else {
             this.outputChannel.appendLine(`WARNING: Server exe not found at path!`);
         }
@@ -165,6 +170,26 @@ export class SidecarManager {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    private ensureExecutable(filePath: string): void {
+        try {
+            // Set executable permission
+            execSync(`chmod +x "${filePath}"`, { stdio: 'ignore' });
+            this.outputChannel.appendLine(`Set executable permission on ${filePath}`);
+
+            // On macOS, remove quarantine attribute to avoid Gatekeeper issues
+            if (process.platform === 'darwin') {
+                try {
+                    execSync(`xattr -d com.apple.quarantine "${filePath}"`, { stdio: 'ignore' });
+                    this.outputChannel.appendLine(`Removed quarantine attribute`);
+                } catch {
+                    // Attribute may not exist, which is fine
+                }
+            }
+        } catch (error) {
+            this.outputChannel.appendLine(`Warning: Could not set executable permission: ${error}`);
+        }
     }
 
     private getSidecarPath(): string {
