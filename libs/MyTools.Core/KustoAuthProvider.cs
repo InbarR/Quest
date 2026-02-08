@@ -8,33 +8,46 @@ namespace MyTools.Core;
 
 /// <summary>
 /// Provides persistent Azure AD authentication for Kusto connections.
-/// Tokens are cached to disk (encrypted via DPAPI on Windows) and reused across server restarts.
+/// Uses ChainedTokenCredential to try silent auth first (Azure CLI, VS Code, etc.)
+/// before falling back to interactive browser login.
 /// </summary>
 public static class KustoAuthProvider
 {
-    private static InteractiveBrowserCredential? _credential;
+    private static ChainedTokenCredential? _credential;
     private static readonly object _lock = new();
 
-    private static InteractiveBrowserCredential GetCredential()
+    private static ChainedTokenCredential GetCredential()
     {
         if (_credential != null) return _credential;
         lock (_lock)
         {
-            _credential ??= new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
-            {
-                TokenCachePersistenceOptions = new TokenCachePersistenceOptions
+            if (_credential != null) return _credential;
+
+            // Try these in order (silent methods first, interactive last)
+            _credential = new ChainedTokenCredential(
+                // 1. Try Azure CLI credentials (if user is logged in via 'az login')
+                new AzureCliCredential(),
+                // 2. Try VS Code credentials (if signed in to Azure extension)
+                new VisualStudioCodeCredential(),
+                // 3. Try Visual Studio credentials
+                new VisualStudioCredential(),
+                // 4. Fall back to interactive browser (with persistent cache)
+                new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
                 {
-                    Name = "QueryStudio"
-                }
-            });
+                    TokenCachePersistenceOptions = new TokenCachePersistenceOptions
+                    {
+                        Name = "QueryStudio"
+                    }
+                })
+            );
             return _credential;
         }
     }
 
     /// <summary>
     /// Gets an Azure AD token for the specified Kusto cluster.
-    /// On first call, opens a browser for interactive login.
-    /// Subsequent calls use the persisted token cache (including refresh tokens).
+    /// Tries silent auth methods first (Azure CLI, VS Code, etc.)
+    /// Falls back to browser login only if needed.
     /// </summary>
     public static async Task<string> GetTokenAsync(string clusterUrl)
     {
@@ -45,7 +58,7 @@ public static class KustoAuthProvider
     }
 
     /// <summary>
-    /// Creates a KustoConnectionStringBuilder with persistent token caching.
+    /// Creates a KustoConnectionStringBuilder with smart credential chain.
     /// </summary>
     public static KustoConnectionStringBuilder CreateKcsb(string clusterUrl, string database)
     {
