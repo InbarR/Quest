@@ -1,0 +1,128 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build-server:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-x64
+          - os: macos-14
+            rid: osx-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build server for ${{ matrix.rid }}
+        run: |
+          dotnet publish server/Quest.Server.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o server-${{ matrix.rid }}
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.rid }}
+          path: server-${{ matrix.rid }}/
+          if-no-files-found: error
+
+  build-extension:
+    needs: build-server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Download all server artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: servers
+
+      - name: Prepare server binaries
+        run: |
+          mkdir -p extension/server/win-x64
+          mkdir -p extension/server/osx-x64
+          mkdir -p extension/server/osx-arm64
+          cp -r servers/server-win-x64/* extension/server/win-x64/
+          cp -r servers/server-osx-x64/* extension/server/osx-x64/
+          cp -r servers/server-osx-arm64/* extension/server/osx-arm64/
+          ls -la extension/server/*/
+
+      - name: Install dependencies
+        working-directory: extension
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: extension
+        run: npm run compile
+
+      - name: Run linter
+        working-directory: extension
+        run: npm run lint
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension
+        working-directory: extension
+        run: vsce package
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-vsix
+          path: extension/*.vsix
+          if-no-files-found: error
+
+  release:
+    needs: build-extension
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: quest-vsix
+          path: release
+
+      - name: Display downloaded files
+        run: ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*.vsix
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
