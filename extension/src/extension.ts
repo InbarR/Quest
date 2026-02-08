@@ -795,6 +795,14 @@ export async function activate(context: vscode.ExtensionContext) {
     schemaStatusBarItem.show();
     context.subscriptions.push(schemaStatusBarItem);
 
+    // Create paste as table status bar item
+    const pasteTableStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
+    pasteTableStatusBarItem.text = '$(clippy) Paste Table';
+    pasteTableStatusBarItem.command = 'queryStudio.pasteAsTable';
+    pasteTableStatusBarItem.tooltip = 'Paste JSON/CSV from clipboard as table (Ctrl+Alt+V)';
+    pasteTableStatusBarItem.show();
+    context.subscriptions.push(pasteTableStatusBarItem);
+
     // Register show log command
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.showLog', () => {
