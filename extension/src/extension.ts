@@ -13,6 +13,9 @@ import { registerAiCommands } from './commands/aiCommands';
 import { registerKqlLanguage } from './languages/kql/kqlLanguage';
 import { registerWiqlLanguage } from './languages/wiql/wiqlLanguage';
 import { registerOqlLanguage } from './languages/oql/oqlLanguage';
+import { parseData, isValidTableData } from './utils/dataParser';
+import * as fs from 'fs';
+import * as path from 'path';
 
 let sidecar: SidecarManager;
 let outputChannel: vscode.OutputChannel;
@@ -23,6 +26,7 @@ let logStatusBarItem: vscode.StatusBarItem;
 let schemaStatusBarItem: vscode.StatusBarItem;
 let currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
 let queryCounter = 0;
+let resultsProviderInstance: ResultsWebViewProvider;
 
 // Export for use by other modules
 export function getCurrentMode(): 'kusto' | 'ado' | 'outlook' {
@@ -116,6 +120,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const snippetsProvider = new SnippetsWebViewProvider(context.extensionUri, context);
     const aiChatProvider = new AIChatViewProvider(context.extensionUri, sidecar.client, outputChannel, context);
     const resultsProvider = new ResultsWebViewProvider(context.extensionUri, context);
+    resultsProviderInstance = resultsProvider;
 
     // Register all view providers synchronously (fast, no I/O)
     context.subscriptions.push(
@@ -248,6 +253,128 @@ export async function activate(context: vscode.ExtensionContext) {
             aiChatProvider.reveal();
         })
     );
+
+    // Register URI handler for external data viewing
+    // Usage: code --open-url "vscode://inbar-rotem.quest/view?file=/path/to/data.json"
+    // Usage: code --open-url "vscode://inbar-rotem.quest/view?data=base64encodeddata"
+    context.subscriptions.push(
+        vscode.window.registerUriHandler({
+            handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
+                outputChannel.appendLine(`[URI Handler] Received: ${uri.toString()}`);
+
+                if (uri.path === '/view') {
+                    const params = new URLSearchParams(uri.query);
+                    const filePath = params.get('file');
+                    const base64Data = params.get('data');
+                    const title = params.get('title') || 'External Data';
+
+                    if (filePath) {
+                        // Load from file
+                        vscode.commands.executeCommand('queryStudio.openTableFromFile', filePath, title);
+                    } else if (base64Data) {
+                        // Decode base64 data
+                        try {
+                            const data = Buffer.from(base64Data, 'base64').toString('utf-8');
+                            showExternalData(data, title);
+                        } catch (error) {
+                            vscode.window.showErrorMessage('Failed to decode data from URL');
+                            outputChannel.appendLine(`[URI Handler] Failed to decode base64: ${error}`);
+                        }
+                    } else {
+                        vscode.window.showWarningMessage('No data provided in URL. Use ?file= or ?data=');
+                    }
+                }
+            }
+        })
+    );
+
+    // Register paste as table command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.pasteAsTable', async () => {
+            const clipboardText = await vscode.env.clipboard.readText();
+
+            if (!clipboardText.trim()) {
+                vscode.window.showWarningMessage('Clipboard is empty');
+                return;
+            }
+
+            if (!isValidTableData(clipboardText)) {
+                const proceed = await vscode.window.showWarningMessage(
+                    'Clipboard content may not be valid table data (JSON array or CSV). Try anyway?',
+                    'Try Anyway', 'Cancel'
+                );
+                if (proceed !== 'Try Anyway') {
+                    return;
+                }
+            }
+
+            showExternalData(clipboardText, 'Pasted Data');
+        })
+    );
+
+    // Register open file as table command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.openTableFromFile', async (filePath?: string, title?: string) => {
+            let targetPath = filePath;
+
+            if (!targetPath) {
+                // Show file picker
+                const fileUri = await vscode.window.showOpenDialog({
+                    canSelectFiles: true,
+                    canSelectFolders: false,
+                    canSelectMany: false,
+                    filters: {
+                        'Data Files': ['json', 'csv', 'tsv', 'txt'],
+                        'All Files': ['*']
+                    },
+                    title: 'Select a data file to view as table'
+                });
+
+                if (!fileUri || fileUri.length === 0) {
+                    return;
+                }
+
+                targetPath = fileUri[0].fsPath;
+            }
+
+            try {
+                const data = fs.readFileSync(targetPath, 'utf-8');
+                const fileName = title || path.basename(targetPath);
+                showExternalData(data, fileName);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                vscode.window.showErrorMessage(`Failed to read file: ${message}`);
+                outputChannel.appendLine(`[Open File] Error: ${message}`);
+            }
+        })
+    );
+
+    // Helper function to show external data in results panel
+    function showExternalData(data: string, title: string) {
+        try {
+            const parsed = parseData(data);
+
+            if (parsed.columns.length === 0) {
+                vscode.window.showWarningMessage('No data to display');
+                return;
+            }
+
+            const result = {
+                success: true,
+                columns: parsed.columns,
+                rows: parsed.rows,
+                rowCount: parsed.rowCount,
+                executionTimeMs: 0
+            };
+
+            resultsProvider.showResults(result, title, undefined, undefined, undefined, 'kusto');
+            outputChannel.appendLine(`[External Data] Displayed ${parsed.rowCount} rows with ${parsed.columns.length} columns`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            vscode.window.showErrorMessage(`Failed to parse data: ${message}`);
+            outputChannel.appendLine(`[External Data] Parse error: ${message}`);
+        }
+    }
 
     // Set up save as preset callback
     resultsProvider.setOnSaveAsPreset(async (query, title) => {

@@ -41,7 +41,8 @@
     "onView:querystudio.clusters",
     "onCommand:queryStudio.newKqlFile",
     "onCommand:queryStudio.newWiqlFile",
-    "onCommand:queryStudio.newOqlFile"
+    "onCommand:queryStudio.newOqlFile",
+    "onUri"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -456,6 +457,18 @@
         "title": "Delete Connection Profile",
         "icon": "$(trash)",
         "category": "Quest"
+      },
+      {
+        "command": "queryStudio.pasteAsTable",
+        "title": "Paste Data as Table",
+        "icon": "$(clippy)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.openTableFromFile",
+        "title": "Open File as Table",
+        "icon": "$(table)",
+        "category": "Quest"
       }
     ],
     "keybindings": [
@@ -502,6 +515,11 @@
         "command": "queryStudio.switchConnectionProfile",
         "key": "ctrl+alt+p",
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.pasteAsTable",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
       }
     ],
     "submenus": [
@@ -622,6 +640,16 @@
           "command": "queryStudio.refreshResultsHistory",
           "when": "view == querystudio.resultsHistory",
           "group": "navigation"
+        },
+        {
+          "command": "queryStudio.pasteAsTable",
+          "when": "view == querystudio.results",
+          "group": "navigation@1"
+        },
+        {
+          "command": "queryStudio.openTableFromFile",
+          "when": "view == querystudio.results",
+          "group": "navigation@2"
         },
         {
           "command": "queryStudio.refreshSnippets",
