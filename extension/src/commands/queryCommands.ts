@@ -954,6 +954,12 @@ export function registerQueryCommands(
                 return;
             }
 
+            // Optional description to help AI select the right query
+            const description = await vscode.window.showInputBox({
+                prompt: 'Description (optional) - helps AI find this query later',
+                placeHolder: 'e.g., Find incidents by tenant name'
+            });
+
             try {
                 // Check if a preset with this name already exists
                 const existingPresets = await client.getPresets();
@@ -981,6 +987,7 @@ export function registerQueryCommands(
                     id: presetId,
                     name: name,
                     query: query,
+                    description: description || undefined,
                     clusterUrl: activeClusterUrl,
                     database: activeDatabase,
                     type: queryType,

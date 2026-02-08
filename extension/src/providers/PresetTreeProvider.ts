@@ -5,7 +5,8 @@ export class PresetTreeItem extends vscode.TreeItem {
     constructor(public readonly preset: PresetInfo) {
         super(preset.name, vscode.TreeItemCollapsibleState.None);
 
-        this.tooltip = preset.query.substring(0, 200) + (preset.query.length > 200 ? '...' : '');
+        const descPart = preset.description ? `${preset.description}\n\n` : '';
+        this.tooltip = descPart + preset.query.substring(0, 200) + (preset.query.length > 200 ? '...' : '');
         this.description = preset.type.toUpperCase();
         this.contextValue = 'preset';
 

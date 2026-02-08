@@ -441,10 +441,11 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     type: p.type
                 }));
 
-                // Include cluster/database in favorites context for AI
+                // Include description and cluster/database in favorites context for AI
                 favorites = filteredPresets.map(p => {
+                    const desc = p.description ? ` (${p.description})` : '';
                     const clusterInfo = p.clusterUrl ? ` [cluster: ${p.clusterUrl}, db: ${p.database || 'default'}]` : '';
-                    return `"${p.name}"${clusterInfo}: ${p.query.substring(0, 200)}${p.query.length > 200 ? '...' : ''}`;
+                    return `"${p.name}"${desc}${clusterInfo}: ${p.query.substring(0, 200)}${p.query.length > 200 ? '...' : ''}`;
                 });
 
                 const history = await this.client.getHistory(10);

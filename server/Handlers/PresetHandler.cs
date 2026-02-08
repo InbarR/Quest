@@ -54,6 +54,7 @@ public class PresetHandler
         {
             PresetName = preset.Name,
             Query = preset.Query,
+            Description = preset.Description,
             AutoSaved = preset.IsAutoSaved,
             Time = DateTime.Parse(preset.CreatedAt),
             Mode = preset.Type switch { "ado" => PresetMode.ADO, "outlook" => PresetMode.Outlook, _ => PresetMode.Kusto },
@@ -109,6 +110,7 @@ public class PresetHandler
             Id: GetPresetId(p),
             Name: p.PresetName ?? "Untitled",
             Query: p.Query ?? "",
+            Description: p.Description,
             ClusterUrl: clusterUrl,
             Database: database,
             Type: p.Mode switch { PresetMode.ADO => "ado", PresetMode.Outlook => "outlook", _ => "kusto" },

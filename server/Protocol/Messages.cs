@@ -24,6 +24,7 @@ public record PresetInfo(
     string Id,
     string Name,
     string Query,
+    string? Description,
     string? ClusterUrl,
     string? Database,
     string Type,

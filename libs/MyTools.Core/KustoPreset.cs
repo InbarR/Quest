@@ -18,6 +18,11 @@ namespace MyTools.Core
         /// </summary>
         public string Title { get; set; }
 
+        /// <summary>
+        /// User-provided description of what this query does (helps AI select the right query)
+        /// </summary>
+        public string Description { get; set; }
+
         public bool Equals(KustoPreset other)
         {
             if (other is null)

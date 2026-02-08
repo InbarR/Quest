@@ -23,6 +23,7 @@ export interface PresetInfo {
     id: string;
     name: string;
     query: string;
+    description?: string;  // User description of what this query does
     clusterUrl?: string;
     database?: string;
     type: 'kusto' | 'ado' | 'outlook';
