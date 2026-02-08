@@ -757,51 +757,76 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Create status bar item to show current mode (clickable to toggle)
-    modeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    // Create Quest status bar items - all grouped on the right with "Quest:" label
+    // Priority determines order (higher = more left): label(110) mode(109) limit(108) schema(107) data(106) | connection(105) keyboard(104) log(103)
+
+    // Quest label
+    const questLabelStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 110);
+    questLabelStatusBarItem.text = 'Quest:';
+    questLabelStatusBarItem.tooltip = 'Quest - Query Studio';
+    questLabelStatusBarItem.command = 'queryStudio.showPanel';
+    questLabelStatusBarItem.show();
+    context.subscriptions.push(questLabelStatusBarItem);
+
+    // Mode indicator (KQL/WIQL/OQL)
+    modeStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 109);
     modeStatusBarItem.command = 'queryStudio.toggleMode';
     modeStatusBarItem.tooltip = 'Click to switch mode';
     updateModeStatusBar('kusto');
     modeStatusBarItem.show();
     context.subscriptions.push(modeStatusBarItem);
 
-    // Create connection status bar item
-    connectionStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    // Results limit
+    const resultsLimitStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 108);
+    resultsLimitStatusBarItem.command = 'queryStudio.setResultsLimit';
+    resultsLimitStatusBarItem.text = '$(list-ordered) 1000';
+    resultsLimitStatusBarItem.tooltip = 'Results Limit\nClick to change';
+    resultsLimitStatusBarItem.show();
+    context.subscriptions.push(resultsLimitStatusBarItem);
+
+    // Export a function to update the results limit display
+    (globalThis as any).questUpdateResultsLimit = (limit: number) => {
+        resultsLimitStatusBarItem.text = `$(list-ordered) ${limit}`;
+        resultsLimitStatusBarItem.tooltip = `Results Limit: ${limit}\nClick to change`;
+    };
+
+    // Schema status
+    schemaStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 107);
+    schemaStatusBarItem.command = 'queryStudio.fetchSchema';
+    updateSchemaStatus(0);
+    schemaStatusBarItem.show();
+    context.subscriptions.push(schemaStatusBarItem);
+
+    // View external data
+    const pasteTableStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 106);
+    pasteTableStatusBarItem.text = '$(table)';
+    pasteTableStatusBarItem.command = 'queryStudio.viewExternalData';
+    pasteTableStatusBarItem.tooltip = 'View JSON/CSV data as table';
+    pasteTableStatusBarItem.show();
+    context.subscriptions.push(pasteTableStatusBarItem);
+
+    // Connection status
+    connectionStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 105);
     connectionStatusBarItem.command = 'queryStudio.showServerInfo';
     updateConnectionStatus(true);
     connectionStatusBarItem.show();
     context.subscriptions.push(connectionStatusBarItem);
 
-    // Create keyboard shortcuts status bar item
-    shortcutsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 98);
+    // Keyboard shortcuts
+    shortcutsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 104);
     shortcutsStatusBarItem.text = '$(keyboard)';
     shortcutsStatusBarItem.command = 'queryStudio.showKeyboardShortcuts';
     shortcutsStatusBarItem.tooltip = 'Show Keyboard Shortcuts (Ctrl+Shift+/)';
     shortcutsStatusBarItem.show();
     context.subscriptions.push(shortcutsStatusBarItem);
 
-    // Create log status bar item
-    logStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 97);
+    // Log output
+    logStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 103);
     logStatusBarItem.text = '$(output)';
     logStatusBarItem.command = 'queryStudio.showLog';
     logStatusBarItem.tooltip = 'Show Quest Log';
     logStatusBarItem.show();
     context.subscriptions.push(logStatusBarItem);
-
-    // Create schema status bar item
-    schemaStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 96);
-    schemaStatusBarItem.command = 'queryStudio.fetchSchema';
-    updateSchemaStatus(0);
-    schemaStatusBarItem.show();
-    context.subscriptions.push(schemaStatusBarItem);
-
-    // Create paste as table status bar item
-    const pasteTableStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 95);
-    pasteTableStatusBarItem.text = '$(table) View Data';
-    pasteTableStatusBarItem.command = 'queryStudio.viewExternalData';
-    pasteTableStatusBarItem.tooltip = 'View JSON/CSV data as table';
-    pasteTableStatusBarItem.show();
-    context.subscriptions.push(pasteTableStatusBarItem);
 
     // Register the menu command for viewing external data
     context.subscriptions.push(

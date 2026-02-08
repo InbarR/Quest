@@ -131,7 +131,6 @@ let activeClusterUrl: string | undefined;
 let activeDatabase: string | undefined;
 let activeQueryType: 'kusto' | 'ado' | 'outlook' = 'kusto';
 let statusBarItem: vscode.StatusBarItem | undefined;
-let resultsLimitStatusBarItem: vscode.StatusBarItem | undefined;
 let maxResultsLimit: number = 1000;
 
 interface ConnectionProfile {
@@ -229,14 +228,10 @@ function updateStatusBar() {
 }
 
 function updateResultsLimitStatusBar() {
-    if (!resultsLimitStatusBarItem) {
-        resultsLimitStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
-        resultsLimitStatusBarItem.command = 'queryStudio.setResultsLimit';
+    // Use global function from extension.ts to update the status bar
+    if ((globalThis as any).questUpdateResultsLimit) {
+        (globalThis as any).questUpdateResultsLimit(maxResultsLimit);
     }
-
-    resultsLimitStatusBarItem.text = `$(list-ordered) Top ${maxResultsLimit}`;
-    resultsLimitStatusBarItem.tooltip = `Results Limit: ${maxResultsLimit}\nClick to change`;
-    resultsLimitStatusBarItem.show();
 }
 
 export function getMaxResultsLimit(): number {
