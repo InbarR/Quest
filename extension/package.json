@@ -509,6 +509,10 @@
         "id": "queryStudio.runSubmenu",
         "label": "Run Query",
         "icon": "$(run)"
+      },
+      {
+        "id": "queryStudio.contextSubmenu",
+        "label": "Quest"
       }
     ],
     "menus": {
@@ -544,31 +548,33 @@
           "group": "navigation@3"
         }
       ],
-      "editor/context": [
+      "queryStudio.contextSubmenu": [
         {
           "command": "queryStudio.runQuery",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "queryStudio@1"
+          "group": "1_run@1"
         },
         {
           "command": "queryStudio.aiChat",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "queryStudio@2"
+          "group": "2_ai@1"
         },
         {
           "command": "queryStudio.aiExplain",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "queryStudio@3"
+          "group": "2_ai@2"
         },
         {
           "command": "queryStudio.saveAsPreset",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "queryStudio@4"
+          "group": "3_save@1"
         },
         {
           "command": "queryStudio.showExample",
+          "group": "4_help@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "queryStudio.contextSubmenu",
           "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
-          "group": "queryStudio@5"
+          "group": "queryStudio"
         }
       ],
       "view/title": [
