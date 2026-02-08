@@ -99,7 +99,7 @@ export function parseCsv(data: string): ParsedData {
         const values = parseCsvLine(lines[i], delimiter);
         // Pad or trim to match column count
         while (values.length < columns.length) {
-            values.push(null);
+            values.push('');
         }
         rows.push(values.slice(0, columns.length));
     }
