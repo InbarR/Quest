@@ -1,16 +1,18 @@
 import * as vscode from 'vscode';
 import { SidecarClient, AiChatRequest } from '../sidecar/SidecarClient';
+import { AIChatViewProvider } from '../providers/AIChatViewProvider';
 
 let chatSessionId: string | undefined;
 
 export function registerAiCommands(
     context: vscode.ExtensionContext,
     client: SidecarClient,
-    outputChannel: vscode.OutputChannel
+    outputChannel: vscode.OutputChannel,
+    aiChatProvider?: AIChatViewProvider
 ) {
     // Note: queryStudio.aiChat is registered in extension.ts (opens panel in right sidebar)
 
-    // AI Explain Query
+    // AI Explain Query - sends to AI Chat panel for interactive follow-up
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.aiExplain', async () => {
             const config = vscode.workspace.getConfiguration('queryStudio');
@@ -35,28 +37,33 @@ export function registerAiCommands(
                 return;
             }
 
-            try {
-                outputChannel.appendLine('Asking AI to explain query...');
-
-                const request: AiChatRequest = {
-                    message: `Please explain this query in detail. What does it do? What are the key operations?\n\n${query}`,
-                    sessionId: chatSessionId
-                };
-
-                const response = await client.aiChat(request);
-                chatSessionId = response.sessionId;
-
-                // Show explanation in output channel
-                outputChannel.appendLine('--- Query Explanation ---');
-                outputChannel.appendLine(response.message);
-                outputChannel.appendLine('-------------------------');
-                outputChannel.show();
-
-                vscode.window.showInformationMessage('Query explanation shown in Output panel');
-            } catch (error) {
-                const message = error instanceof Error ? error.message : 'Unknown error';
-                outputChannel.appendLine(`AI Error: ${message}`);
-                vscode.window.showErrorMessage(`Failed to explain query: ${message}`);
+            // Open and focus AI Chat panel, then send the explain request
+            if (aiChatProvider) {
+                await vscode.commands.executeCommand('workbench.view.extension.queryStudio');
+                try {
+                    await vscode.commands.executeCommand('querystudio.aiChat.focus');
+                } catch {
+                    // View might already be focused
+                }
+                aiChatProvider.reveal();
+                aiChatProvider.sendMessage(`Explain this query in detail. What does it do? What are the key operations?`);
+            } else {
+                // Fallback to output channel if provider not available
+                try {
+                    const request: AiChatRequest = {
+                        message: `Please explain this query in detail. What does it do? What are the key operations?\n\n${query}`,
+                        sessionId: chatSessionId
+                    };
+                    const response = await client.aiChat(request);
+                    chatSessionId = response.sessionId;
+                    outputChannel.appendLine('--- Query Explanation ---');
+                    outputChannel.appendLine(response.message);
+                    outputChannel.appendLine('-------------------------');
+                    outputChannel.show();
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    vscode.window.showErrorMessage(`Failed to explain query: ${message}`);
+                }
             }
         })
     );

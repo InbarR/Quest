@@ -280,7 +280,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Update AI chat with the new active cluster
         aiChatProvider.setActiveCluster(cluster.url, cluster.database, cluster.name, cluster.type);
     });
-    registerAiCommands(context, sidecar.client, outputChannel);
+    registerAiCommands(context, sidecar.client, outputChannel, aiChatProvider);
 
     // Register language features (fast, no I/O)
     registerKqlLanguage(context, sidecar.client);
