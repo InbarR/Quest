@@ -368,6 +368,12 @@ You help with Azure DevOps Work Item Query Language (WIQL) queries.
 ## YOUR ROLE
 You help with Azure Data Explorer Kusto Query Language (KQL) generation and modification.
 
+## CRITICAL: TABLE SELECTION
+When generating queries, ALWAYS check the '## AVAILABLE TABLES' section and use the most relevant table:
+- Match table names to the user's request (e.g., 'tenants' -> look for tables with 'Tenant' in the name)
+- Prefer exact name matches over partial matches
+- Do NOT default to tables from favorites if a better matching table exists in AVAILABLE TABLES
+
 ## INSTRUCTIONS
 1. If the user provides a '## USER KQL' block, treat it as the CURRENT QUERY and modify it.
 2. Generate precise, efficient KQL queries.
@@ -404,7 +410,20 @@ You help with Azure Data Explorer Kusto Query Language (KQL) generation and modi
             _ => ("KQL", "kql")
         };
 
-        // Add current query context FIRST if available - this is the key context
+        // Add available tables FIRST - this is critical for table selection
+        if (context?.AvailableTables != null && context.AvailableTables.Length > 0)
+        {
+            sb.AppendLine("## AVAILABLE TABLES");
+            sb.AppendLine("These are the tables in the connected database. Use the most relevant table for the user's request:");
+            // Show up to 100 tables
+            var tablesToShow = context.AvailableTables.Take(100);
+            sb.AppendLine(string.Join(", ", tablesToShow));
+            if (context.AvailableTables.Length > 100)
+                sb.AppendLine($"... and {context.AvailableTables.Length - 100} more");
+            sb.AppendLine();
+        }
+
+        // Add current query context if available - this is the key context
         if (context?.CurrentQuery != null && !string.IsNullOrWhiteSpace(context.CurrentQuery))
         {
             sb.AppendLine($"## USER {queryLabel}");

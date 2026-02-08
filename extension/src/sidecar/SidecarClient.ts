@@ -84,6 +84,7 @@ export interface AiChatRequest {
         clusterUrl?: string;
         database?: string;
         schema?: SchemaInfo;
+        availableTables?: string[];  // List of table names from connected database
         favorites?: string[];  // Array of favorite query names and snippets
         recentQueries?: string[];  // Array of recent query snippets
         personaInstructions?: string;  // Custom persona system prompt

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SidecarClient } from '../sidecar/SidecarClient';
+import { getActiveConnection } from '../commands/queryCommands';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
@@ -455,6 +456,21 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 this.outputChannel.appendLine(`[AI Chat] Failed to load favorites/history for context: ${e}`);
             }
 
+            // Get available tables from schema if connected
+            let availableTables: string[] | undefined;
+            try {
+                const conn = getActiveConnection();
+                if (conn.clusterUrl && conn.database && this._currentMode === 'kusto') {
+                    const schema = await this.client.getSchema(conn.clusterUrl, conn.database);
+                    if (schema.tables && schema.tables.length > 0) {
+                        availableTables = schema.tables.map(t => t.name);
+                        this.outputChannel.appendLine(`[AI Chat] Including ${availableTables.length} tables from schema`);
+                    }
+                }
+            } catch (e) {
+                this.outputChannel.appendLine(`[AI Chat] Failed to load schema for context: ${e}`);
+            }
+
             // Ensure GitHub token is available via VS Code auth before sending
             const ghToken = await this.ensureGithubToken(false);
             if (ghToken) {
@@ -468,6 +484,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 sessionId: this._sessionId,
                 context: {
                     currentQuery,
+                    availableTables: availableTables,
                     favorites: favorites.length > 0 ? favorites : undefined,
                     recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                     personaInstructions: personaPrompt,
@@ -487,6 +504,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                         sessionId: this._sessionId,
                         context: {
                             currentQuery,
+                            availableTables: availableTables,
                             favorites: favorites.length > 0 ? favorites : undefined,
                             recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                             personaInstructions: personaPrompt,

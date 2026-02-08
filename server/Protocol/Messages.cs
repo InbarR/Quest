@@ -69,6 +69,7 @@ public record AiContext(
     string? CurrentQuery = null,
     string? ClusterUrl = null,
     string? Database = null,
+    string[]? AvailableTables = null,
     string[]? Favorites = null,
     string[]? RecentQueries = null,
     string? PersonaInstructions = null,
