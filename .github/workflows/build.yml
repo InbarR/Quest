@@ -36,6 +36,12 @@ jobs:
         run: |
           dotnet publish server/Quest.Server.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o server-${{ matrix.rid }}
 
+      - name: Ad-hoc sign macOS binary
+        if: runner.os == 'macOS'
+        run: |
+          codesign -s - --force --deep server-${{ matrix.rid }}/QueryStudio.Server
+          echo "Ad-hoc signed QueryStudio.Server for ${{ matrix.rid }}"
+
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
