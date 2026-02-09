@@ -67,10 +67,12 @@ public class OutlookService : IDisposable
 
         try
         {
-            var (folderType, filter, take, projectColumns, projectReorderColumns) = ParseQuery(query);
+            var (folderType, filter, take, projectColumns, projectReorderColumns, postFilters) = ParseQuery(query);
             // Use take from query if specified, otherwise use maxResults parameter
             var effectiveMaxResults = take ?? maxResults;
-            _log?.Invoke($"Executing Outlook query: Folder={folderType}, Filter={filter}, Take={effectiveMaxResults}");
+            // Fetch more items if we have post-filters to ensure we get enough after filtering
+            var fetchLimit = postFilters.Count > 0 ? effectiveMaxResults * 3 : effectiveMaxResults;
+            _log?.Invoke($"Executing Outlook query: Folder={folderType}, Filter={filter}, Take={effectiveMaxResults}, PostFilters={postFilters.Count}");
 
             var folder = GetFolder(folderType);
             if (folder == null)
@@ -82,10 +84,10 @@ public class OutlookService : IDisposable
                 };
             }
 
-            var items = await SearchFolderAsync(folder, filter, ct, effectiveMaxResults);
+            var items = await SearchFolderAsync(folder, filter, ct, fetchLimit);
 
             // Process items and release COM objects immediately to prevent memory exhaustion
-            var result = ConvertToResultAndRelease(items, folderType, effectiveMaxResults, projectColumns, projectReorderColumns);
+            var result = ConvertToResultAndRelease(items, folderType, effectiveMaxResults, projectColumns, projectReorderColumns, postFilters);
 
             Marshal.ReleaseComObject(folder);
 
@@ -155,6 +157,7 @@ public class OutlookService : IDisposable
         public string Field { get; set; } = "";
         public string Operator { get; set; } = "";
         public string Value { get; set; } = "";
+        public bool RequiresPostFilter { get; set; } = false; // Body filters need post-filtering
     }
 
     private ParsedOqlQuery ParseOqlQuery(string query)
@@ -276,7 +279,10 @@ public class OutlookService : IDisposable
 
                 if (type == "contains")
                 {
-                    return new OqlCondition { Field = field, Operator = "contains", Value = match.Groups[2].Value };
+                    // Body filters don't work reliably in DASL, need post-filtering
+                    var requiresPostFilter = field.Equals("body", StringComparison.OrdinalIgnoreCase) ||
+                                            field.Equals("bodypreview", StringComparison.OrdinalIgnoreCase);
+                    return new OqlCondition { Field = field, Operator = "contains", Value = match.Groups[2].Value, RequiresPostFilter = requiresPostFilter };
                 }
                 else if (type == "startswith")
                 {
@@ -325,11 +331,12 @@ public class OutlookService : IDisposable
     }
 
     // Legacy method for backward compatibility - converts to new format
-    private (string folderType, string filter, int? take, List<string>? projectColumns, List<string>? projectReorderColumns) ParseQuery(string query)
+    private (string folderType, string filter, int? take, List<string>? projectColumns, List<string>? projectReorderColumns, List<OqlCondition> postFilters) ParseQuery(string query)
     {
         var parsed = ParseOqlQuery(query);
         var filter = ConvertConditionsToLegacyFilter(parsed.Conditions);
-        return (parsed.Folder, filter, parsed.Take, parsed.ProjectColumns, parsed.ProjectReorderColumns);
+        var postFilters = parsed.Conditions.Where(c => c.RequiresPostFilter).ToList();
+        return (parsed.Folder, filter, parsed.Take, parsed.ProjectColumns, parsed.ProjectReorderColumns, postFilters);
     }
 
     private string ConvertConditionsToLegacyFilter(List<OqlCondition> conditions)
@@ -681,7 +688,7 @@ public class OutlookService : IDisposable
     }
 
     private OutlookQueryResult ConvertToResultAndRelease(List<object> items, string folderType, int maxResults,
-        List<string>? projectColumns = null, List<string>? projectReorderColumns = null)
+        List<string>? projectColumns = null, List<string>? projectReorderColumns = null, List<OqlCondition>? postFilters = null)
     {
         var isCalendar = folderType.Equals("Calendar", StringComparison.OrdinalIgnoreCase);
         var isContacts = folderType.Equals("Contacts", StringComparison.OrdinalIgnoreCase);
@@ -757,6 +764,36 @@ public class OutlookService : IDisposable
                 string[] fullRow; // Row with all default columns
                 if (item is MailItem mail)
                 {
+                    // Get full body for post-filtering
+                    var fullBody = "";
+                    try { fullBody = mail.Body ?? ""; } catch { }
+
+                    // Apply post-filters (e.g., Body contains "x")
+                    if (postFilters != null && postFilters.Count > 0)
+                    {
+                        var passesAllFilters = true;
+                        foreach (var filter in postFilters)
+                        {
+                            if (filter.Field.Equals("body", StringComparison.OrdinalIgnoreCase) ||
+                                filter.Field.Equals("bodypreview", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (filter.Operator == "contains")
+                                {
+                                    if (!fullBody.Contains(filter.Value, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        passesAllFilters = false;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (!passesAllFilters)
+                        {
+                            // Skip this item - doesn't match post-filters
+                            continue;
+                        }
+                    }
+
                     // Get Attachments info carefully - it creates a COM object
                     var attachments = mail.Attachments;
                     var attachCount = attachments.Count;
@@ -767,8 +804,7 @@ public class OutlookService : IDisposable
                     var bodyPreview = "";
                     try
                     {
-                        var body = mail.Body ?? "";
-                        bodyPreview = body.Length > 100 ? body.Substring(0, 100) : body;
+                        bodyPreview = fullBody.Length > 100 ? fullBody.Substring(0, 100) : fullBody;
                         bodyPreview = bodyPreview.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ").Trim();
                     }
                     catch { }
