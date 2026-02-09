@@ -9,7 +9,7 @@ export interface ParsedData {
 }
 
 /**
- * Parse data from string (auto-detects JSON or CSV)
+ * Parse data from string (auto-detects JSON, markdown table, or CSV)
  */
 export function parseData(data: string): ParsedData {
     const trimmed = data.trim();
@@ -19,8 +19,13 @@ export function parseData(data: string): ParsedData {
         try {
             return parseJson(trimmed);
         } catch {
-            // Fall through to CSV
+            // Fall through to other formats
         }
+    }
+
+    // Check for markdown/pipe-delimited table
+    if (isMarkdownTable(trimmed)) {
+        return parseMarkdownTable(trimmed);
     }
 
     // Try CSV/TSV
@@ -112,6 +117,71 @@ export function parseCsv(data: string): ParsedData {
 }
 
 /**
+ * Check if data looks like a markdown/pipe-delimited table
+ */
+function isMarkdownTable(data: string): boolean {
+    const lines = data.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length < 2) return false;
+
+    // Check if lines contain pipe characters
+    const hasPipes = lines[0].includes('|');
+    if (!hasPipes) return false;
+
+    // Check if second line is a separator (contains dashes)
+    const secondLine = lines[1].trim();
+    const isSeparator = /^[\s|:-]+$/.test(secondLine) && secondLine.includes('-');
+
+    return isSeparator;
+}
+
+/**
+ * Parse markdown/pipe-delimited table into table format
+ */
+function parseMarkdownTable(data: string): ParsedData {
+    const lines = data.split(/\r?\n/).filter(line => line.trim());
+
+    if (lines.length < 2) {
+        return { columns: [], rows: [], rowCount: 0 };
+    }
+
+    // Parse header (first line)
+    const columns = parsePipeLine(lines[0]);
+
+    // Skip separator line (second line) and parse data rows
+    const rows: any[][] = [];
+    for (let i = 2; i < lines.length; i++) {
+        const line = lines[i].trim();
+        // Skip empty lines or additional separator lines
+        if (!line || /^[\s|:-]+$/.test(line)) continue;
+
+        const values = parsePipeLine(line);
+        // Pad or trim to match column count
+        while (values.length < columns.length) {
+            values.push('');
+        }
+        rows.push(values.slice(0, columns.length));
+    }
+
+    return {
+        columns,
+        rows,
+        rowCount: rows.length
+    };
+}
+
+/**
+ * Parse a pipe-delimited line (markdown table row)
+ */
+function parsePipeLine(line: string): string[] {
+    // Remove leading/trailing pipes and split
+    let trimmed = line.trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+
+    return trimmed.split('|').map(cell => cell.trim());
+}
+
+/**
  * Parse a single CSV line, handling quoted values
  */
 function parseCsvLine(line: string, delimiter: string): string[] {
@@ -170,6 +240,11 @@ export function isValidTableData(data: string): boolean {
         } catch {
             return false;
         }
+    }
+
+    // Check for markdown table
+    if (isMarkdownTable(trimmed)) {
+        return true;
     }
 
     // Check for CSV/TSV (at least 2 lines with consistent column count)
