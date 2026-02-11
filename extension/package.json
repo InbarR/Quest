@@ -340,8 +340,8 @@
       },
       {
         "command": "queryStudio.reportIssue",
-        "title": "Report Issue",
-        "icon": "$(bug)",
+        "title": "Send Feedback",
+        "icon": "$(feedback)",
         "category": "Quest"
       },
       {
@@ -748,6 +748,11 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically save executed queries to history"
+        },
+        "queryStudio.feedbackFormId": {
+          "type": "string",
+          "default": "",
+          "description": "Formspree form ID for feedback submissions (get one at formspree.io)"
         },
         "queryStudio.ai.enabled": {
           "type": "boolean",

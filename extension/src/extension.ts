@@ -7,6 +7,7 @@ import { ResultsWebViewProvider } from './providers/ResultsWebViewProvider';
 import { ResultsHistoryWebViewProvider } from './providers/ResultsHistoryWebViewProvider';
 import { SnippetsWebViewProvider } from './providers/SnippetsWebViewProvider';
 import { AIChatViewProvider } from './providers/AIChatViewProvider';
+import { FeedbackPanel } from './providers/FeedbackPanel';
 import { registerQueryCommands, resetActiveConnection, setActiveQueryType } from './commands/queryCommands';
 import { registerClusterCommands } from './commands/clusterCommands';
 import { registerAiCommands } from './commands/aiCommands';
@@ -897,10 +898,10 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Register report issue command
+    // Register report issue / feedback command
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.reportIssue', async () => {
-            await vscode.env.openExternal(vscode.Uri.parse('https://github.com/InbarR/Quest/issues/new'));
+            FeedbackPanel.createOrShow(context.extensionUri);
         })
     );
 
