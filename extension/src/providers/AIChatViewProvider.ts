@@ -400,8 +400,89 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    /**
+     * Detect the intended query mode based on keywords in user message
+     */
+    private _detectIntendedMode(text: string): 'kusto' | 'ado' | 'outlook' | null {
+        const lowerText = text.toLowerCase();
+
+        // Email/Outlook keywords
+        const outlookKeywords = [
+            'email', 'emails', 'mail', 'mails', 'inbox', 'outlook',
+            'sent mail', 'sent items', 'drafts', 'unread',
+            'from:', 'to:', 'subject:', 'attachment',
+            'received', 'sender', 'recipient'
+        ];
+
+        // Work item/ADO keywords
+        const adoKeywords = [
+            'work item', 'work items', 'workitem', 'workitems',
+            'bug', 'bugs', 'task', 'tasks', 'user story', 'user stories',
+            'feature', 'features', 'epic', 'epics', 'backlog',
+            'sprint', 'iteration', 'area path', 'assigned to',
+            'wiql', 'azure devops', 'ado', 'devops'
+        ];
+
+        // Kusto/KQL keywords
+        const kustoKeywords = [
+            'kusto', 'kql', 'azure data explorer', 'ade',
+            'cluster', 'table', 'summarize', 'where', 'project',
+            'logs', 'telemetry', 'metrics', 'traces', 'events'
+        ];
+
+        // Count matches for each mode
+        let outlookScore = 0;
+        let adoScore = 0;
+        let kustoScore = 0;
+
+        for (const keyword of outlookKeywords) {
+            if (lowerText.includes(keyword)) outlookScore++;
+        }
+        for (const keyword of adoKeywords) {
+            if (lowerText.includes(keyword)) adoScore++;
+        }
+        for (const keyword of kustoKeywords) {
+            if (lowerText.includes(keyword)) kustoScore++;
+        }
+
+        // Only suggest mode change if there's a clear winner with at least 1 match
+        const maxScore = Math.max(outlookScore, adoScore, kustoScore);
+        if (maxScore === 0) return null;
+
+        // Need at least 2x the score of other modes to switch, or the message is clearly about one mode
+        if (outlookScore > 0 && outlookScore >= adoScore * 2 && outlookScore >= kustoScore * 2) {
+            return 'outlook';
+        }
+        if (adoScore > 0 && adoScore >= outlookScore * 2 && adoScore >= kustoScore * 2) {
+            return 'ado';
+        }
+        if (kustoScore > 0 && kustoScore >= outlookScore * 2 && kustoScore >= adoScore * 2) {
+            return 'kusto';
+        }
+
+        return null;
+    }
+
     private async _handleUserMessage(text: string, context?: { includeCurrentQuery?: boolean }) {
         if (this._isProcessing || !text.trim()) return;
+
+        // Detect if user's message suggests a different mode
+        const detectedMode = this._detectIntendedMode(text);
+        if (detectedMode && detectedMode !== this._currentMode) {
+            // Check if Outlook is supported on this platform
+            const isOutlookSupported = process.platform === 'win32';
+            if (detectedMode === 'outlook' && !isOutlookSupported) {
+                // Don't auto-switch to Outlook on Mac/Linux
+                this.outputChannel.appendLine(`[AI Chat] Detected Outlook intent but not supported on ${process.platform}`);
+            } else {
+                // Auto-switch mode
+                this.outputChannel.appendLine(`[AI Chat] Auto-switching from ${this._currentMode} to ${detectedMode} based on message content`);
+                await vscode.commands.executeCommand('queryStudio.setMode', detectedMode);
+                // Show notification
+                const modeNames = { kusto: 'Kusto (KQL)', ado: 'Azure DevOps (WIQL)', outlook: 'Outlook (OQL)' };
+                vscode.window.showInformationMessage(`Switched to ${modeNames[detectedMode]} mode based on your query`);
+            }
+        }
 
         this._isProcessing = true;
         this.outputChannel.appendLine(`[AI Chat] Sending message: ${text.substring(0, 100)}...`);
