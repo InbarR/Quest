@@ -297,6 +297,18 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     this._onInsertQuery(message.query);
                 }
                 break;
+            case 'runQuery':
+                if (message.query) {
+                    // Apply the query first, then run it
+                    if (this._onApplyQuery) {
+                        this._onApplyQuery(message.query, message.cluster, message.database);
+                    }
+                    // Small delay to ensure query is applied, then run
+                    setTimeout(() => {
+                        vscode.commands.executeCommand('queryStudio.runQuery');
+                    }, 100);
+                }
+                break;
             case 'applyQuery':
                 if (this._onApplyQuery && message.query) {
                     this._onApplyQuery(message.query, message.cluster, message.database);
@@ -1668,7 +1680,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             return \`
                 \${clusterChip}
                 <div class="query-actions">
-                    <button class="primary query-btn" data-action="apply" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}">Use</button>
+                    <button class="primary query-btn" data-action="run" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}">▶ Run</button>
+                    <button class="query-btn" data-action="apply" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}">Use</button>
                     <button class="query-btn" data-action="copy" data-query="\${encodedQuery}">Copy</button>
                 </div>
             \`;
@@ -1714,6 +1727,9 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             const database = encodedDb ? decodeURIComponent(escape(atob(encodedDb))) : null;
 
             switch (action) {
+                case 'run':
+                    vscode.postMessage({ command: 'runQuery', query: query, cluster: clusterUrl, database: database });
+                    break;
                 case 'apply':
                     vscode.postMessage({ command: 'applyQuery', query: query, cluster: clusterUrl, database: database });
                     break;
