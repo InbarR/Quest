@@ -66,6 +66,10 @@ public record CompletionItem(string Label, string Kind, string? Detail = null, s
 
 // AI
 public record AiChatRequest(string Message, string? Mode = null, AiContext? Context = null, string? SessionId = null);
+public record AdoContextInfo(
+    string? DefaultAreaPath = null,
+    string? DefaultProject = null
+);
 public record AiContext(
     string? CurrentQuery = null,
     string? ClusterUrl = null,
@@ -74,7 +78,8 @@ public record AiContext(
     string[]? Favorites = null,
     string[]? RecentQueries = null,
     string? PersonaInstructions = null,
-    string? SystemPromptOverride = null
+    string? SystemPromptOverride = null,
+    AdoContextInfo? AdoContext = null
 );
 public record GetSystemPromptRequest(string? Mode = null);
 public record GetSystemPromptResponse(string SystemPrompt);

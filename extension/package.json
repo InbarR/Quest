@@ -729,6 +729,16 @@
           "default": "",
           "description": "Default database name"
         },
+        "queryStudio.ado.defaultAreaPath": {
+          "type": "string",
+          "default": "",
+          "description": "Default Area Path for Azure DevOps queries (e.g., 'MyProject\\MyTeam')"
+        },
+        "queryStudio.ado.defaultProject": {
+          "type": "string",
+          "default": "",
+          "description": "Default Azure DevOps project name"
+        },
         "queryStudio.queryTimeout": {
           "type": "number",
           "default": 300,

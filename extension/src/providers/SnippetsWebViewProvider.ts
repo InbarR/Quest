@@ -509,8 +509,40 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        let code = snippet.code;
+
+        // For WIQL snippets, inject ADO defaults if configured
+        if (snippet.language === 'wiql') {
+            const adoConfig = vscode.workspace.getConfiguration('queryStudio.ado');
+            const defaultAreaPath = adoConfig.get<string>('defaultAreaPath');
+            const defaultProject = adoConfig.get<string>('defaultProject');
+
+            // If area path is configured, add it to WHERE clause
+            if (defaultAreaPath && !code.includes('[System.AreaPath]')) {
+                // Find WHERE clause and add area path filter
+                const whereMatch = code.match(/WHERE\s+/i);
+                if (whereMatch) {
+                    const whereIndex = code.indexOf(whereMatch[0]) + whereMatch[0].length;
+                    code = code.slice(0, whereIndex) +
+                           `[System.AreaPath] UNDER '${defaultAreaPath}'\n  AND ` +
+                           code.slice(whereIndex);
+                }
+            }
+
+            // If project is configured and not already in query, add it
+            if (defaultProject && !code.includes('[System.TeamProject]')) {
+                const whereMatch = code.match(/WHERE\s+/i);
+                if (whereMatch) {
+                    const whereIndex = code.indexOf(whereMatch[0]) + whereMatch[0].length;
+                    code = code.slice(0, whereIndex) +
+                           `[System.TeamProject] = '${defaultProject}'\n  AND ` +
+                           code.slice(whereIndex);
+                }
+            }
+        }
+
         // Insert as snippet with placeholders
-        const snippetString = new vscode.SnippetString(snippet.code);
+        const snippetString = new vscode.SnippetString(code);
         await editor.insertSnippet(snippetString);
     }
 

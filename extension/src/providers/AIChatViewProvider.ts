@@ -572,6 +572,21 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 await this.client.setAiToken(ghToken);
             }
 
+            // Get ADO-specific settings if in ADO mode
+            let adoContext: { defaultAreaPath?: string; defaultProject?: string } | undefined;
+            if (this._currentMode === 'ado') {
+                const adoConfig = vscode.workspace.getConfiguration('queryStudio.ado');
+                const defaultAreaPath = adoConfig.get<string>('defaultAreaPath');
+                const defaultProject = adoConfig.get<string>('defaultProject');
+                if (defaultAreaPath || defaultProject) {
+                    adoContext = {
+                        defaultAreaPath: defaultAreaPath || undefined,
+                        defaultProject: defaultProject || undefined
+                    };
+                    this.outputChannel.appendLine(`[AI Chat] ADO context: areaPath=${defaultAreaPath}, project=${defaultProject}`);
+                }
+            }
+
             const personaPrompt = this._getPersonaPrompt();
             let response = await this.client.aiChat({
                 message: text,
@@ -583,7 +598,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     favorites: favorites.length > 0 ? favorites : undefined,
                     recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                     personaInstructions: personaPrompt,
-                    systemPromptOverride: this._customSystemPrompt
+                    systemPromptOverride: this._customSystemPrompt,
+                    adoContext
                 }
             });
 
@@ -603,7 +619,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                             favorites: favorites.length > 0 ? favorites : undefined,
                             recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                             personaInstructions: personaPrompt,
-                            systemPromptOverride: this._customSystemPrompt
+                            systemPromptOverride: this._customSystemPrompt,
+                            adoContext
                         }
                     });
                 } else {

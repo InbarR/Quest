@@ -353,11 +353,24 @@ You help with Azure DevOps Work Item Query Language (WIQL) queries.
 1. If the user provides a '## USER WIQL' block, modify it based on their request.
 2. Generate complete, runnable WIQL queries.
 3. Wrap queries in triple backticks (```wiql).
+4. If '## ADO DEFAULTS' section is provided, USE those defaults (Area Path, Project) in your queries.
 
 ## WIQL BEST PRACTICES
 1. Use proper field references: [System.Id], [System.Title], [System.State], etc.
 2. Use @Me for current user, @Today for today's date
 3. Common fields: WorkItemType, State, AssignedTo, CreatedDate, ChangedDate
+4. Filter by Area Path using: [System.AreaPath] UNDER 'Project\Team'
+5. Filter by Iteration using: [System.IterationPath] = @CurrentIteration
+
+## EXAMPLE WITH AREA PATH
+```wiql
+SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo]
+FROM WorkItems
+WHERE [System.TeamProject] = 'MyProject'
+AND [System.AreaPath] UNDER 'MyProject\MyTeam'
+AND [System.State] <> 'Closed'
+ORDER BY [System.ChangedDate] DESC
+```
 
 ## OUTPUT RULE
 - For query requests: output the query in ```wiql blocks with brief explanation.
@@ -459,6 +472,22 @@ When generating queries:
                 sb.AppendLine($"- {truncated}");
             }
             sb.AppendLine();
+        }
+
+        // Add ADO-specific context
+        if (mode == "ado" && context?.AdoContext != null)
+        {
+            var adoCtx = context.AdoContext;
+            if (!string.IsNullOrWhiteSpace(adoCtx.DefaultAreaPath) || !string.IsNullOrWhiteSpace(adoCtx.DefaultProject))
+            {
+                sb.AppendLine("## ADO DEFAULTS");
+                if (!string.IsNullOrWhiteSpace(adoCtx.DefaultProject))
+                    sb.AppendLine($"Default Project: {adoCtx.DefaultProject}");
+                if (!string.IsNullOrWhiteSpace(adoCtx.DefaultAreaPath))
+                    sb.AppendLine($"Default Area Path: {adoCtx.DefaultAreaPath}");
+                sb.AppendLine("IMPORTANT: Use these defaults in your WIQL queries unless the user specifies otherwise.");
+                sb.AppendLine();
+            }
         }
 
         // Add the user's actual request
