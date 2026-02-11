@@ -504,14 +504,23 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Check if Outlook mode is supported (Windows only - requires COM interop)
+    const isOutlookSupported = process.platform === 'win32';
+
     // Register mode toggle command - shows quick pick to select mode
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.toggleMode', async () => {
-            const modes = [
-                { label: 'Ⓚ Kusto (KQL)', description: 'Query KQL', mode: 'kusto' as const },
-                { label: 'Ⓐ Azure DevOps (WIQL)', description: 'Query work items', mode: 'ado' as const },
-                { label: '📧 Outlook (OQL)', description: 'Query mails', mode: 'outlook' as const }
+            const modes: { label: string; description: string; mode: 'kusto' | 'ado' | 'outlook' }[] = [
+                { label: 'Ⓚ Kusto (KQL)', description: 'Query KQL', mode: 'kusto' },
+                { label: 'Ⓐ Azure DevOps (WIQL)', description: 'Query work items', mode: 'ado' },
             ];
+
+            // Only add Outlook option on Windows
+            if (isOutlookSupported) {
+                modes.push({ label: '📧 Outlook (OQL)', description: 'Query mails', mode: 'outlook' });
+            } else {
+                modes.push({ label: '📧 Outlook (OQL)', description: '⚠️ Windows only', mode: 'outlook' });
+            }
 
             // Mark current mode
             const items = modes.map(m => ({
@@ -525,6 +534,15 @@ export async function activate(context: vscode.ExtensionContext) {
             });
 
             if (!selected || selected.mode === currentMode) {
+                return;
+            }
+
+            // Check if trying to use Outlook on non-Windows
+            if (selected.mode === 'outlook' && !isOutlookSupported) {
+                vscode.window.showWarningMessage(
+                    'Outlook mode requires Windows with Microsoft Outlook installed. It uses COM interop which is not available on macOS/Linux.',
+                    'OK'
+                );
                 return;
             }
 
@@ -574,6 +592,15 @@ export async function activate(context: vscode.ExtensionContext) {
             outputChannel.appendLine(`Switched to ${newMode.toUpperCase()} mode`);
         }),
         vscode.commands.registerCommand('queryStudio.setMode', async (mode: 'kusto' | 'ado' | 'outlook') => {
+            // Check if trying to use Outlook on non-Windows
+            if (mode === 'outlook' && !isOutlookSupported) {
+                vscode.window.showWarningMessage(
+                    'Outlook mode requires Windows with Microsoft Outlook installed.',
+                    'OK'
+                );
+                return;
+            }
+
             setCurrentMode(mode);
             updateModeStatusBar(mode);
 
@@ -610,6 +637,15 @@ export async function activate(context: vscode.ExtensionContext) {
             outputChannel.appendLine(`Set to ${mode.toUpperCase()} mode`);
         }),
         vscode.commands.registerCommand('queryStudio.newOqlFile', async () => {
+            // Check if Outlook is supported on this platform
+            if (!isOutlookSupported) {
+                vscode.window.showWarningMessage(
+                    'Outlook queries require Windows with Microsoft Outlook installed.',
+                    'OK'
+                );
+                return;
+            }
+
             const doc = await vscode.workspace.openTextDocument({
                 content: 'Inbox\n| take 100\n',
                 language: 'oql'
