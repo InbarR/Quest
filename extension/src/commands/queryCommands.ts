@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { SidecarClient, QueryRequest, ClusterInfo, ResultHistoryItem } from '../sidecar/SidecarClient';
+import { SidecarClient, QueryRequest, ClusterInfo, ResultHistoryItem, RulePropertyInfo } from '../sidecar/SidecarClient';
 import { ResultsWebViewProvider } from '../providers/ResultsWebViewProvider';
 import { ResultsHistoryWebViewProvider } from '../providers/ResultsHistoryWebViewProvider';
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
@@ -1262,6 +1262,85 @@ export function registerQueryCommands(
         }
     });
 
+    // Set up callbacks for rule mutations (from context menu)
+    resultsProvider.setOnEditRule(async (ruleName: string) => {
+        outputChannel.appendLine(`Opening rule editor for: "${ruleName}"`);
+        try {
+            await showRuleEditorQuickPick(client, ruleName, outputChannel);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            outputChannel.appendLine(`Rule editor error: ${message}`);
+            vscode.window.showErrorMessage(`Failed to edit rule: ${message}`);
+        }
+    });
+
+    resultsProvider.setOnRenameRule(async (currentName: string) => {
+        const newName = await vscode.window.showInputBox({
+            prompt: `Rename rule "${currentName}"`,
+            value: currentName,
+            placeHolder: 'Enter new rule name'
+        });
+        if (!newName || newName === currentName) {
+            return;
+        }
+        outputChannel.appendLine(`Renaming rule: "${currentName}" → "${newName}"`);
+        try {
+            const result = await client.renameRule(currentName, newName);
+            if (result.success) {
+                vscode.window.showInformationMessage(`Rule renamed to "${newName}"`);
+                vscode.commands.executeCommand('queryStudio.runQuery');
+            } else {
+                vscode.window.showErrorMessage(`Failed to rename rule: ${result.error}`);
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            outputChannel.appendLine(`Failed to rename rule: ${message}`);
+            vscode.window.showErrorMessage(`Failed to rename rule: ${message}`);
+        }
+    });
+
+    resultsProvider.setOnSetRuleEnabled(async (ruleName: string, enabled: boolean) => {
+        outputChannel.appendLine(`${enabled ? 'Enabling' : 'Disabling'} rule: "${ruleName}"`);
+        try {
+            const result = await client.setRuleEnabled(ruleName, enabled);
+            if (result.success) {
+                vscode.window.showInformationMessage(`Rule "${ruleName}" ${enabled ? 'enabled' : 'disabled'}`);
+                vscode.commands.executeCommand('queryStudio.runQuery');
+            } else {
+                vscode.window.showErrorMessage(`Failed to ${enabled ? 'enable' : 'disable'} rule: ${result.error}`);
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            outputChannel.appendLine(`Failed to ${enabled ? 'enable' : 'disable'} rule: ${message}`);
+            vscode.window.showErrorMessage(`Failed to ${enabled ? 'enable' : 'disable'} rule: ${message}`);
+        }
+    });
+
+    resultsProvider.setOnDeleteRule(async (ruleName: string) => {
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete rule "${ruleName}"? This cannot be undone.`,
+            { modal: true },
+            'Delete'
+        );
+        if (confirm !== 'Delete') {
+            return;
+        }
+        outputChannel.appendLine(`Deleting rule: "${ruleName}"`);
+        try {
+            const result = await client.deleteRule(ruleName);
+            if (result.success) {
+                vscode.window.showInformationMessage(`Rule "${ruleName}" deleted`);
+                vscode.commands.executeCommand('queryStudio.runQuery');
+            } else {
+                vscode.window.showErrorMessage(`Failed to delete rule: ${result.error}`);
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            outputChannel.appendLine(`Failed to delete rule: ${message}`);
+            vscode.window.showErrorMessage(`Failed to delete rule: ${message}`);
+        }
+    });
+
     // Set up callback for direct opening in Outlook (from context menu)
     resultsProvider.setOnDirectOpenOutlookItem(async (entryId: string) => {
         outputChannel.appendLine(`Opening directly in Outlook: ${entryId.substring(0, 20)}...`);
@@ -1274,4 +1353,232 @@ export function registerQueryCommands(
             vscode.window.showErrorMessage(`Failed to open in Outlook: ${message}`);
         }
     });
+}
+
+/**
+ * QuickPick item with attached property metadata for rule editing.
+ */
+interface RuleQuickPickItem extends vscode.QuickPickItem {
+    _prop?: RulePropertyInfo;
+    _action?: 'rename' | 'toggleEnabled' | 'openOutlook';
+}
+
+/**
+ * Show a multi-select QuickPick rule editor.
+ * - Toggle items are pre-checked if enabled; uncheck to disable, check to enable.
+ * - Text items are unchecked; check them to open an input box for editing.
+ * - All changes are applied in batch when the user confirms.
+ */
+async function showRuleEditorQuickPick(
+    client: SidecarClient,
+    ruleName: string,
+    outputChannel: vscode.OutputChannel
+): Promise<void> {
+    const details = await client.getRuleDetails(ruleName);
+    if (!details.success) {
+        vscode.window.showErrorMessage(`Failed to load rule: ${details.error}`);
+        return;
+    }
+
+    const buildItems = (): RuleQuickPickItem[] => {
+        const items: RuleQuickPickItem[] = [];
+
+        // Special actions
+        items.push({ label: 'Rule Info', kind: vscode.QuickPickItemKind.Separator });
+        items.push({
+            label: `$(edit) Rename rule (current: "${details.name}")`,
+            description: 'Check to rename',
+            alwaysShow: true,
+            picked: false,
+            _action: 'rename',
+        });
+        items.push({
+            label: `$(symbol-boolean) Rule enabled`,
+            description: details.enabled ? 'Currently ON' : 'Currently OFF',
+            alwaysShow: true,
+            picked: details.enabled,
+            _action: 'toggleEnabled',
+        });
+
+        // Helper to add a section of properties
+        const addSection = (title: string, props: RulePropertyInfo[]) => {
+            if (props.length === 0) { return; }
+            items.push({ label: title, kind: vscode.QuickPickItemKind.Separator });
+            for (const prop of props) {
+                if (!prop.editable) {
+                    // Read-only items shown as info, not pickable
+                    items.push({
+                        label: `$(lock) ${prop.name}`,
+                        description: prop.value || '(empty)',
+                        detail: 'Read-only',
+                        alwaysShow: true,
+                        picked: false,
+                        _prop: prop,
+                    });
+                } else if (prop.type === 'toggle') {
+                    items.push({
+                        label: `$(symbol-boolean) ${prop.name}`,
+                        description: prop.enabled ? 'ON' : 'OFF',
+                        alwaysShow: true,
+                        picked: prop.enabled,
+                        _prop: prop,
+                    });
+                } else {
+                    // text / category - check to edit
+                    items.push({
+                        label: `$(pencil) ${prop.name}`,
+                        description: prop.value || '(empty)',
+                        detail: 'Check to edit value',
+                        alwaysShow: true,
+                        picked: false,
+                        _prop: prop,
+                    });
+                }
+            }
+        };
+
+        const conditions = details.properties.filter((p: RulePropertyInfo) => p.category === 'condition');
+        const actions = details.properties.filter((p: RulePropertyInfo) => p.category === 'action');
+        const exceptions = details.properties.filter((p: RulePropertyInfo) => p.category === 'exception');
+        addSection('Conditions', conditions);
+        addSection('Actions', actions);
+        addSection('Exceptions', exceptions);
+
+        items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+        items.push({
+            label: '$(link-external) Open Rules & Alerts in Outlook',
+            description: 'For advanced editing',
+            alwaysShow: true,
+            picked: false,
+            _action: 'openOutlook',
+        });
+
+        return items;
+    };
+
+    const items = buildItems();
+
+    // Use the QuickPick API for multi-select with pre-selected items
+    const selected = await new Promise<readonly RuleQuickPickItem[] | undefined>(resolve => {
+        const qp = vscode.window.createQuickPick<RuleQuickPickItem>();
+        qp.title = `Edit Rule: ${details.name}`;
+        qp.placeholder = 'Toggle checkboxes to enable/disable, check text fields to edit, then press Enter';
+        qp.canSelectMany = true;
+        qp.items = items;
+        qp.matchOnDescription = true;
+        // Pre-select items that are "picked"
+        qp.selectedItems = items.filter(i => i.picked);
+        qp.onDidAccept(() => {
+            resolve(qp.selectedItems);
+            qp.dispose();
+        });
+        qp.onDidHide(() => {
+            resolve(undefined);
+            qp.dispose();
+        });
+        qp.show();
+    });
+
+    if (!selected) { return; } // Cancelled
+
+    const selectedSet = new Set(selected);
+    let changeCount = 0;
+    const errors: string[] = [];
+
+    // Handle "Open in Outlook" - if checked, just open and return
+    if (selected.some(s => s._action === 'openOutlook')) {
+        try { await client.openRulesEditor(); } catch { }
+        return;
+    }
+
+    // Handle rename
+    const renameItem = items.find(i => i._action === 'rename');
+    if (renameItem && selectedSet.has(renameItem)) {
+        const newName = await vscode.window.showInputBox({
+            prompt: `Rename rule "${details.name}"`,
+            value: details.name,
+            placeHolder: 'Enter new rule name'
+        });
+        if (newName && newName !== details.name) {
+            const result = await client.renameRule(details.name, newName);
+            if (result.success) {
+                details.name = newName;
+                changeCount++;
+            } else {
+                errors.push(`Rename: ${result.error}`);
+            }
+        }
+    }
+
+    // Handle rule enabled toggle
+    const enabledItem = items.find(i => i._action === 'toggleEnabled');
+    if (enabledItem) {
+        const wantEnabled = selectedSet.has(enabledItem);
+        if (wantEnabled !== details.enabled) {
+            const result = await client.setRuleEnabled(details.name, wantEnabled);
+            if (result.success) {
+                changeCount++;
+            } else {
+                errors.push(`Enabled: ${result.error}`);
+            }
+        }
+    }
+
+    // Handle property changes - collect text edits first
+    const textEdits: { prop: RulePropertyInfo; newValue: string }[] = [];
+    for (const item of items) {
+        if (!item._prop || !item._prop.editable) { continue; }
+        const prop = item._prop;
+
+        if (prop.type === 'text') {
+            // Text field: if checked, prompt for new value
+            if (selectedSet.has(item)) {
+                const newValue = await vscode.window.showInputBox({
+                    prompt: `Edit "${prop.name}" (comma-separated values)`,
+                    value: prop.value,
+                    placeHolder: 'Enter values separated by commas'
+                });
+                if (newValue !== undefined && newValue !== prop.value) {
+                    textEdits.push({ prop, newValue });
+                }
+            }
+        }
+    }
+
+    // Apply all toggle changes
+    for (const item of items) {
+        if (!item._prop || !item._prop.editable || item._prop.type !== 'toggle') { continue; }
+        const prop = item._prop;
+        const wantEnabled = selectedSet.has(item);
+        if (wantEnabled !== prop.enabled) {
+            const result = await client.updateRuleProperty(details.name, prop.key, String(wantEnabled));
+            if (result.success) {
+                changeCount++;
+            } else {
+                errors.push(`${prop.name}: ${result.error}`);
+            }
+        }
+    }
+
+    // Apply all text changes
+    for (const { prop, newValue } of textEdits) {
+        const result = await client.updateRuleProperty(details.name, prop.key, newValue);
+        if (result.success) {
+            changeCount++;
+        } else {
+            errors.push(`${prop.name}: ${result.error}`);
+        }
+    }
+
+    // Show summary
+    if (errors.length > 0) {
+        vscode.window.showWarningMessage(`${changeCount} change(s) applied, ${errors.length} failed: ${errors[0]}`);
+    } else if (changeCount > 0) {
+        vscode.window.showInformationMessage(`${changeCount} change(s) applied to "${details.name}"`);
+    }
+
+    // Refresh the rules query after editing
+    if (changeCount > 0) {
+        vscode.commands.executeCommand('queryStudio.runQuery');
+    }
 }

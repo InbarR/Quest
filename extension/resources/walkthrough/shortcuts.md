@@ -24,7 +24,7 @@ Master Quest with these essential shortcuts.
 | Shortcut | Action |
 |----------|--------|
 | **Ctrl+Shift+M** | Switch query mode (Kusto/ADO/Outlook) |
-| **Ctrl+Shift+A** | Open AI Chat panel |
+| **Ctrl+Shift+C** | Open AI Chat panel |
 | **Ctrl+Shift+P** | VS Code command palette |
 
 ## Results Panel

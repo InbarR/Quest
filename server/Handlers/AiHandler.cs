@@ -276,7 +276,7 @@ FolderName
 | take N
 
 ## FOLDERS
-Inbox, SentMail, Drafts, DeletedItems, Calendar, Contacts, Tasks
+Inbox, SentMail, Drafts, DeletedItems, Calendar, Contacts, Tasks, Rules
 
 ## MAIL FIELDS
 Subject, From, To, ReceivedTime, UnRead, HasAttachments, Importance, Body
@@ -289,6 +289,9 @@ FullName, Email1Address, CompanyName, BusinessPhone, JobTitle
 
 ## TASK FIELDS
 Subject, DueDate, Status, PercentComplete, Owner
+
+## RULES FIELDS (virtual folder for mail rules)
+Name, ExecutionOrder, RuleType, Conditions, Actions, Exceptions, Enabled
 
 ## OPERATORS
 - contains: partial text match (Subject contains ""meeting"")
@@ -333,6 +336,12 @@ Calendar
 | take 20
 ```
 
+```oql
+// Mail rules
+Rules
+| take 100
+```
+
 ## INSTRUCTIONS
 1. ALWAYS use KQL-like pipe syntax, NOT SQL syntax
 2. Use ""contains"" for partial text search (not LIKE)
@@ -353,7 +362,7 @@ You help with Azure DevOps Work Item Query Language (WIQL) queries.
 1. If the user provides a '## USER WIQL' block, modify it based on their request.
 2. Generate complete, runnable WIQL queries.
 3. Wrap queries in triple backticks (```wiql).
-4. If '## ADO DEFAULTS' section is provided, USE those defaults (Area Path, Project) in your queries.
+4. If '## ADO DEFAULTS (MANDATORY)' section is provided, you MUST include the Area Path filter in EVERY query. This is non-negotiable.
 
 ## WIQL BEST PRACTICES
 1. Use proper field references: [System.Id], [System.Title], [System.State], etc.
@@ -362,11 +371,17 @@ You help with Azure DevOps Work Item Query Language (WIQL) queries.
 4. Filter by Area Path using: [System.AreaPath] UNDER 'Project\Team'
 5. Filter by Iteration using: [System.IterationPath] = @CurrentIteration
 
-## EXAMPLE WITH AREA PATH
+## AREA PATH RULE
+When the '## ADO DEFAULTS (MANDATORY)' section specifies a Default Area Path, you MUST ALWAYS add it as a WHERE clause filter.
+- For WIQL: `AND [System.AreaPath] UNDER '<area path>'`
+- For KQL-style: `| where AreaPath under ""<area path>""`
+NEVER omit the area path filter when defaults are provided. This applies to every single query without exception.
+
+## EXAMPLE
 ```wiql
 SELECT [System.Id], [System.Title], [System.State], [System.AssignedTo]
 FROM WorkItems
-WHERE [System.TeamProject] = 'MyProject'
+WHERE [System.WorkItemType] = 'Bug'
 AND [System.AreaPath] UNDER 'MyProject\MyTeam'
 AND [System.State] <> 'Closed'
 ORDER BY [System.ChangedDate] DESC
@@ -480,12 +495,15 @@ When generating queries:
             var adoCtx = context.AdoContext;
             if (!string.IsNullOrWhiteSpace(adoCtx.DefaultAreaPath) || !string.IsNullOrWhiteSpace(adoCtx.DefaultProject))
             {
-                sb.AppendLine("## ADO DEFAULTS");
+                sb.AppendLine("## ADO DEFAULTS (MANDATORY)");
                 if (!string.IsNullOrWhiteSpace(adoCtx.DefaultProject))
                     sb.AppendLine($"Default Project: {adoCtx.DefaultProject}");
                 if (!string.IsNullOrWhiteSpace(adoCtx.DefaultAreaPath))
+                {
                     sb.AppendLine($"Default Area Path: {adoCtx.DefaultAreaPath}");
-                sb.AppendLine("IMPORTANT: Use these defaults in your WIQL queries unless the user specifies otherwise.");
+                    sb.AppendLine($"CRITICAL: You MUST add `[System.AreaPath] UNDER '{adoCtx.DefaultAreaPath}'` to the WHERE clause of EVERY WIQL query you generate, unless the user explicitly asks for a different area path.");
+                    sb.AppendLine($"For KQL-style queries, add: `| where AreaPath under \"{adoCtx.DefaultAreaPath}\"`");
+                }
                 sb.AppendLine();
             }
         }
@@ -519,6 +537,7 @@ When generating queries:
 
         return null;
     }
+
 
     private static string ExtractFallbackTitle(string query)
     {

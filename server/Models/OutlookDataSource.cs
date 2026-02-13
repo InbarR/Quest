@@ -217,7 +217,8 @@ public class OutlookDataSource : IDataSource, ISchemaProvider, IDataSourceHelp
 
         var outlookFolders = new[] {
             "inbox", "sentmail", "sent", "drafts", "deleteditems", "trash",
-            "calendar", "contacts", "tasks", "notes", "journal", "outbox", "junk"
+            "calendar", "contacts", "tasks", "notes", "journal", "outbox", "junk",
+            "rules"
         };
 
         // Check for KQL-like syntax: starts with folder name, may have pipe operators
@@ -258,6 +259,16 @@ public class OutlookDataSource : IDataSource, ISchemaProvider, IDataSourceHelp
 
         SchemaColumn[] columns = folderLower switch
         {
+            "rules" => new[]
+            {
+                new SchemaColumn { Name = "Name", DataType = "string" },
+                new SchemaColumn { Name = "ExecutionOrder", DataType = "int" },
+                new SchemaColumn { Name = "RuleType", DataType = "string" },
+                new SchemaColumn { Name = "Conditions", DataType = "string" },
+                new SchemaColumn { Name = "Actions", DataType = "string" },
+                new SchemaColumn { Name = "Exceptions", DataType = "string" },
+                new SchemaColumn { Name = "Enabled", DataType = "bool" }
+            },
             "calendar" => new[]
             {
                 new SchemaColumn { Name = "Subject", DataType = "string" },
@@ -381,6 +392,13 @@ public class OutlookDataSource : IDataSource, ISchemaProvider, IDataSourceHelp
                 Description = "Get all tasks",
                 Query = "Tasks\n| take 50",
                 Category = "Tasks"
+            },
+            new QueryExample
+            {
+                Title = "Mail Rules",
+                Description = "Get all mail rules",
+                Query = "Rules\n| take 100",
+                Category = "Rules"
             }
         };
     }
@@ -400,7 +418,7 @@ Examples:
   | where ReceivedTime > ago(7d)
   | take 100
 
-Folders: Inbox, SentMail, Drafts, Calendar, Contacts, Tasks
+Folders: Inbox, SentMail, Drafts, Calendar, Contacts, Tasks, Rules
 
 Operators: contains, ==, !=, >, <, >=, <=, startswith, endswith
 
@@ -409,7 +427,8 @@ Time functions: ago(7d), ago(24h), ago(30m), now()
 Mail fields: Subject, From, To, ReceivedTime, UnRead, HasAttachments
 Calendar fields: Subject, Start, End, Location, Organizer
 Contact fields: FullName, Email1Address, CompanyName
-Task fields: Subject, DueDate, Status, PercentComplete";
+Task fields: Subject, DueDate, Status, PercentComplete
+Rule fields: Name, ExecutionOrder, RuleType, Conditions, Actions, Exceptions, Enabled";
 
     public void Dispose()
     {

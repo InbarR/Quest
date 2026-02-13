@@ -36,6 +36,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     private _onReRun?: (query: string, clusterUrl: string, database: string) => void;
     private _onOpenOutlookItem?: (entryId: string) => void;
     private _onDirectOpenOutlookItem?: (entryId: string) => void;
+    private _onEditRule?: (ruleName: string) => void;
+    private _onRenameRule?: (currentName: string) => void;
+    private _onSetRuleEnabled?: (ruleName: string, enabled: boolean) => void;
+    private _onDeleteRule?: (ruleName: string) => void;
     private _context?: vscode.ExtensionContext;
     private _columnPresets: Map<string, { widths: Record<number, number>, order: string[] }> = new Map();
 
@@ -95,6 +99,22 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
     public setOnDirectOpenOutlookItem(callback: (entryId: string) => void) {
         this._onDirectOpenOutlookItem = callback;
+    }
+
+    public setOnEditRule(callback: (ruleName: string) => void) {
+        this._onEditRule = callback;
+    }
+
+    public setOnRenameRule(callback: (currentName: string) => void) {
+        this._onRenameRule = callback;
+    }
+
+    public setOnSetRuleEnabled(callback: (ruleName: string, enabled: boolean) => void) {
+        this._onSetRuleEnabled = callback;
+    }
+
+    public setOnDeleteRule(callback: (ruleName: string) => void) {
+        this._onDeleteRule = callback;
     }
 
     public resolveWebviewView(
@@ -262,6 +282,50 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                         const entryId = String(activeTab.result.rows[message.rowIndex][entryIdIdx] ?? '');
                         if (entryId) {
                             this._onDirectOpenOutlookItem(entryId);
+                        }
+                    }
+                }
+                break;
+            case 'editRule':
+                if (activeTab?.result.success && activeTab.queryType === 'outlook' && this._onEditRule) {
+                    const editNameColIdx = activeTab.result.columns.findIndex(c => c.toLowerCase() === 'name');
+                    if (editNameColIdx >= 0 && message.rowIndex >= 0 && message.rowIndex < activeTab.result.rows.length) {
+                        const editRuleName = String(activeTab.result.rows[message.rowIndex][editNameColIdx] ?? '');
+                        if (editRuleName) {
+                            this._onEditRule(editRuleName);
+                        }
+                    }
+                }
+                break;
+            case 'renameRule':
+                if (activeTab?.result.success && activeTab.queryType === 'outlook' && this._onRenameRule) {
+                    const nameColIdx = activeTab.result.columns.findIndex(c => c.toLowerCase() === 'name');
+                    if (nameColIdx >= 0 && message.rowIndex >= 0 && message.rowIndex < activeTab.result.rows.length) {
+                        const currentName = String(activeTab.result.rows[message.rowIndex][nameColIdx] ?? '');
+                        if (currentName) {
+                            this._onRenameRule(currentName);
+                        }
+                    }
+                }
+                break;
+            case 'setRuleEnabled':
+                if (activeTab?.result.success && activeTab.queryType === 'outlook' && this._onSetRuleEnabled) {
+                    const ruleNameColIdx = activeTab.result.columns.findIndex(c => c.toLowerCase() === 'name');
+                    if (ruleNameColIdx >= 0 && message.rowIndex >= 0 && message.rowIndex < activeTab.result.rows.length) {
+                        const ruleName = String(activeTab.result.rows[message.rowIndex][ruleNameColIdx] ?? '');
+                        if (ruleName) {
+                            this._onSetRuleEnabled(ruleName, message.enabled);
+                        }
+                    }
+                }
+                break;
+            case 'deleteRule':
+                if (activeTab?.result.success && activeTab.queryType === 'outlook' && this._onDeleteRule) {
+                    const delNameColIdx = activeTab.result.columns.findIndex(c => c.toLowerCase() === 'name');
+                    if (delNameColIdx >= 0 && message.rowIndex >= 0 && message.rowIndex < activeTab.result.rows.length) {
+                        const ruleName = String(activeTab.result.rows[message.rowIndex][delNameColIdx] ?? '');
+                        if (ruleName) {
+                            this._onDeleteRule(ruleName);
                         }
                     }
                 }
@@ -2790,15 +2854,34 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     }
                 }
                 // Preview work item details
-                addMenuItem(menu, '👁️ Preview Details', () => showAdoPreview(ri));
+                addMenuItem(menu, '👁️ Preview Details  (Ctrl+Enter)', () => showAdoPreview(ri));
             }
             if (queryType === 'outlook') {
-                addMenuItem(menu, '📧 Open in Outlook', () => vscode.postMessage({ command: 'directOpenOutlookItem', rowIndex: ri }));
-                addMenuItem(menu, '👁️ Preview', () => vscode.postMessage({ command: 'openOutlookItem', rowIndex: ri }));
+                const isRulesResult = currentData.columns.some(c => c === 'ExecutionOrder');
+                if (isRulesResult) {
+                    addMenuItem(menu, '👁️ Preview Details  (Ctrl+Enter)', () => showPreview(ri));
+                    addMenuItem(menu, '📝 Edit Rule', () => {
+                        vscode.postMessage({ command: 'editRule', rowIndex: ri });
+                    });
+                    addMenuItem(menu, '✏️ Rename Rule', () => {
+                        vscode.postMessage({ command: 'renameRule', rowIndex: ri });
+                    });
+                    const enabledIdx = currentData.columns.findIndex(c => c === 'Enabled');
+                    const isEnabled = enabledIdx >= 0 && String(currentData.rows[ri][enabledIdx]).toLowerCase() === 'true';
+                    addMenuItem(menu, isEnabled ? '❌ Disable Rule' : '✅ Enable Rule', () => {
+                        vscode.postMessage({ command: 'setRuleEnabled', rowIndex: ri, enabled: !isEnabled });
+                    });
+                    addMenuItem(menu, '🗑️ Delete Rule', () => {
+                        vscode.postMessage({ command: 'deleteRule', rowIndex: ri });
+                    });
+                } else {
+                    addMenuItem(menu, '📧 Open in Outlook', () => vscode.postMessage({ command: 'directOpenOutlookItem', rowIndex: ri }));
+                    addMenuItem(menu, '👁️ Preview', () => vscode.postMessage({ command: 'openOutlookItem', rowIndex: ri }));
+                }
             }
             // Preview for Kusto results
             if (queryType === 'kusto') {
-                addMenuItem(menu, '👁️ Preview Row', () => showPreview(ri));
+                addMenuItem(menu, '👁️ Preview Row  (Ctrl+Enter)', () => showPreview(ri));
             }
 
             // Link option
@@ -2978,6 +3061,15 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                             rows[newIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                         }
                     }, 10);
+                }
+            }
+            // Ctrl+Enter to toggle preview of selected row
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && selectedRowIndex >= 0 && !e.target.matches('input, textarea')) {
+                e.preventDefault();
+                if (previewPanel && previewPanel.style.display !== 'none') {
+                    closePreview();
+                } else {
+                    showPreview(selectedRowIndex);
                 }
             }
             // Ctrl+A to select all
@@ -3874,7 +3966,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                     <path d="M19 8h-1.81c-.45-.78-1.07-1.45-1.82-1.96l.93-.93c.39-.39.39-1.02 0-1.41-.39-.39-1.02-.39-1.41 0l-1.47 1.47C12.96 5.06 12.49 5 12 5s-.96.06-1.41.17L9.11 3.7c-.39-.39-1.02-.39-1.41 0-.39.39-.39 1.02 0 1.41l.92.93C7.88 6.55 7.26 7.22 6.81 8H5c-.55 0-1 .45-1 1s.45 1 1 1h1.09c-.05.33-.09.66-.09 1v1H5c-.55 0-1 .45-1 1s.45 1 1 1h1v1c0 .34.04.67.09 1H5c-.55 0-1 .45-1 1s.45 1 1 1h1.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H19c.55 0 1-.45 1-1s-.45-1-1-1h-1.09c.05-.33.09-.66.09-1v-1h1c.55 0 1-.45 1-1s-.45-1-1-1h-1v-1c0-.34-.04-.67-.09-1H19c.55 0 1-.45 1-1s-.45-1-1-1zm-6 8h-2v-2h2v2zm0-4h-2v-2h2v2z"/>
                 </svg>
-                Report Bug / Feedback
+                Send Feedback (Ctrl+Shift+B)
             </span>
         </span>
     </div>

@@ -74,6 +74,12 @@ public class OutlookService : IDisposable
             var fetchLimit = postFilters.Count > 0 ? effectiveMaxResults * 3 : effectiveMaxResults;
             _log?.Invoke($"Executing Outlook query: Folder={folderType}, Filter={filter}, Take={effectiveMaxResults}, PostFilters={postFilters.Count}");
 
+            // Rules is a virtual folder - handle separately
+            if (folderType.Equals("rules", StringComparison.OrdinalIgnoreCase))
+            {
+                return GetRulesAsResult(effectiveMaxResults, projectColumns, projectReorderColumns, postFilters);
+            }
+
             var folder = GetFolder(folderType);
             if (folder == null)
             {
@@ -131,6 +137,7 @@ public class OutlookService : IDisposable
             folders.Add(new OutlookFolderInfo("Tasks", "Tasks", OlDefaultFolders.olFolderTasks));
             folders.Add(new OutlookFolderInfo("Notes", "Notes", OlDefaultFolders.olFolderNotes));
             folders.Add(new OutlookFolderInfo("Journal", "Journal entries", OlDefaultFolders.olFolderJournal));
+            folders.Add(new OutlookFolderInfo("Rules", "Mail rules", OlDefaultFolders.olFolderInbox)); // Virtual folder, FolderType unused
         }
         catch (Exception ex)
         {
@@ -1012,6 +1019,171 @@ public class OutlookService : IDisposable
     }
 
     /// <summary>
+    /// Open Outlook's Rules and Alerts dialog
+    /// </summary>
+    public RuleOperationResult OpenRulesEditor()
+    {
+        Connect();
+
+        try
+        {
+            dynamic app = _namespace!.Application;
+            var explorer = app.ActiveExplorer();
+            if (explorer != null)
+            {
+                explorer.CommandBars.ExecuteMso("RulesAndAlerts");
+                Marshal.ReleaseComObject(explorer);
+                return new RuleOperationResult { Success = true };
+            }
+            else
+            {
+                return new RuleOperationResult { Success = false, Error = "No active Outlook window found" };
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error opening rules editor: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Rename an Outlook rule
+    /// </summary>
+    public RuleOperationResult RenameRule(string currentName, string newName)
+    {
+        if (string.IsNullOrEmpty(currentName))
+            return new RuleOperationResult { Success = false, Error = "Current rule name is empty" };
+        if (string.IsNullOrEmpty(newName))
+            return new RuleOperationResult { Success = false, Error = "New rule name is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            for (int i = 1; i <= rules.Count; i++)
+            {
+                var rule = rules[i];
+                try
+                {
+                    if (string.Equals(rule.Name, currentName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        rule.Name = newName;
+                        rules.Save();
+                        return new RuleOperationResult { Success = true };
+                    }
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(rule);
+                }
+            }
+            return new RuleOperationResult { Success = false, Error = $"Rule '{currentName}' not found" };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error renaming rule: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
+    /// <summary>
+    /// Enable or disable an Outlook rule
+    /// </summary>
+    public RuleOperationResult SetRuleEnabled(string ruleName, bool enabled)
+    {
+        if (string.IsNullOrEmpty(ruleName))
+            return new RuleOperationResult { Success = false, Error = "Rule name is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            for (int i = 1; i <= rules.Count; i++)
+            {
+                var rule = rules[i];
+                try
+                {
+                    if (string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        rule.Enabled = enabled;
+                        rules.Save();
+                        return new RuleOperationResult { Success = true };
+                    }
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(rule);
+                }
+            }
+            return new RuleOperationResult { Success = false, Error = $"Rule '{ruleName}' not found" };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error setting rule enabled: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
+    /// <summary>
+    /// Delete an Outlook rule
+    /// </summary>
+    public RuleOperationResult DeleteRule(string ruleName)
+    {
+        if (string.IsNullOrEmpty(ruleName))
+            return new RuleOperationResult { Success = false, Error = "Rule name is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            for (int i = 1; i <= rules.Count; i++)
+            {
+                var rule = rules[i];
+                try
+                {
+                    if (string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Marshal.ReleaseComObject(rule);
+                        rules.Remove(i);
+                        rules.Save();
+                        return new RuleOperationResult { Success = true };
+                    }
+                }
+                finally
+                {
+                    // rule already released above if matched; safe to call again if not matched
+                    try { Marshal.ReleaseComObject(rule); } catch { }
+                }
+            }
+            return new RuleOperationResult { Success = false, Error = $"Rule '{ruleName}' not found" };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error deleting rule: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
+    /// <summary>
     /// Get a preview of an email by its EntryId
     /// </summary>
     public MailPreviewResult GetMailPreview(string entryId)
@@ -1073,6 +1245,836 @@ public class OutlookService : IDisposable
         {
             _log?.Invoke($"Error getting mail preview: {ex.Message}");
             return new MailPreviewResult { Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Get mail rules as a query result (virtual "Rules" folder).
+    /// </summary>
+    private OutlookQueryResult GetRulesAsResult(int maxResults,
+        List<string>? projectColumns = null, List<string>? projectReorderColumns = null, List<OqlCondition>? postFilters = null)
+    {
+        Connect();
+
+        string[] defaultColumns = { "Name", "ExecutionOrder", "RuleType", "Conditions", "Actions", "Exceptions", "Enabled" };
+
+        // Determine final columns based on project or project-reorder
+        string[] columns;
+        if (projectColumns != null && projectColumns.Count > 0)
+        {
+            columns = projectColumns
+                .Where(c => defaultColumns.Any(dc => dc.Equals(c, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (columns.Length == 0) columns = defaultColumns;
+        }
+        else if (projectReorderColumns != null && projectReorderColumns.Count > 0)
+        {
+            var reordered = new List<string>();
+            foreach (var col in projectReorderColumns)
+            {
+                var match = defaultColumns.FirstOrDefault(dc => dc.Equals(col, StringComparison.OrdinalIgnoreCase));
+                if (match != null && !reordered.Contains(match))
+                    reordered.Add(match);
+            }
+            foreach (var col in defaultColumns)
+            {
+                if (!reordered.Contains(col))
+                    reordered.Add(col);
+            }
+            columns = reordered.ToArray();
+        }
+        else
+        {
+            columns = defaultColumns;
+        }
+
+        var columnMapping = columns.Select(c => Array.FindIndex(defaultColumns, dc => dc.Equals(c, StringComparison.OrdinalIgnoreCase))).ToArray();
+
+        var rows = new List<string[]>();
+        Rules? rulesCollection = null;
+
+        try
+        {
+            rulesCollection = _namespace!.DefaultStore.GetRules();
+            _log?.Invoke($"Found {rulesCollection.Count} rules");
+
+            for (int i = 1; i <= rulesCollection.Count && rows.Count < maxResults; i++)
+            {
+                Rule? rule = null;
+                try
+                {
+                    rule = rulesCollection[i];
+
+                    var fullRow = new[]
+                    {
+                        rule.Name ?? "",
+                        rule.ExecutionOrder.ToString(),
+                        rule.RuleType.ToString(),
+                        GetEnabledConditions(rule.Conditions),
+                        GetEnabledActions(rule.Actions),
+                        GetEnabledConditions(rule.Exceptions),
+                        rule.Enabled ? "Yes" : "No"
+                    };
+
+                    // Apply post-filters
+                    if (postFilters != null && postFilters.Count > 0)
+                    {
+                        var passesAll = true;
+                        foreach (var filter in postFilters)
+                        {
+                            var fieldIdx = Array.FindIndex(defaultColumns, dc => dc.Equals(filter.Field, StringComparison.OrdinalIgnoreCase));
+                            if (fieldIdx >= 0 && fieldIdx < fullRow.Length)
+                            {
+                                var fieldValue = fullRow[fieldIdx];
+                                if (filter.Operator == "contains" && !fieldValue.Contains(filter.Value, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    passesAll = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!passesAll) continue;
+                    }
+
+                    var row = columnMapping.Select(idx => idx >= 0 && idx < fullRow.Length ? fullRow[idx] : "").ToArray();
+                    rows.Add(row);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Invoke($"Error processing rule {i}: {ex.Message}");
+                }
+                finally
+                {
+                    if (rule != null) Marshal.ReleaseComObject(rule);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error getting rules: {ex.Message}");
+            return new OutlookQueryResult
+            {
+                Success = false,
+                Error = $"Failed to get mail rules: {ex.Message}"
+            };
+        }
+        finally
+        {
+            if (rulesCollection != null) Marshal.ReleaseComObject(rulesCollection);
+        }
+
+        return new OutlookQueryResult
+        {
+            Success = true,
+            Columns = columns,
+            Rows = rows.ToArray(),
+            RowCount = rows.Count
+        };
+    }
+
+    /// <summary>
+    /// Get human-readable descriptions of enabled rule conditions.
+    /// </summary>
+    private string GetEnabledConditions(RuleConditions conditions)
+    {
+        var explanations = new List<string>();
+
+        try
+        {
+            foreach (RuleCondition condition in conditions)
+            {
+                if (!condition.Enabled) continue;
+
+                switch (condition.ConditionType)
+                {
+                    case OlRuleConditionType.olConditionOnlyToMe:
+                        explanations.Add("Sent only to me");
+                        break;
+
+                    case OlRuleConditionType.olConditionSubject:
+                        var textCondition = condition as TextRuleCondition;
+                        if (textCondition?.Text is string[] subjectTexts && subjectTexts.Length > 0)
+                            explanations.Add($"Subject contains \"{string.Join(", ", subjectTexts)}\"");
+                        break;
+
+                    case OlRuleConditionType.olConditionBody:
+                        var bodyCondition = condition as TextRuleCondition;
+                        if (bodyCondition?.Text is string[] bodyTexts && bodyTexts.Length > 0)
+                            explanations.Add($"Body contains \"{string.Join(", ", bodyTexts)}\"");
+                        break;
+
+                    case OlRuleConditionType.olConditionFrom:
+                        try
+                        {
+                            dynamic fromCondition = condition;
+                            Recipients recipients = fromCondition.Recipients;
+                            explanations.Add($"From \"{GetRecipientNames(recipients)}\"");
+                            Marshal.ReleaseComObject(recipients);
+                        }
+                        catch { explanations.Add("From [Unreadable]"); }
+                        break;
+
+                    case OlRuleConditionType.olConditionSentTo:
+                        try
+                        {
+                            dynamic sentToCondition = condition;
+                            Recipients recipients = sentToCondition.Recipients;
+                            explanations.Add($"Sent to \"{GetRecipientNames(recipients)}\"");
+                            Marshal.ReleaseComObject(recipients);
+                        }
+                        catch { explanations.Add("Sent to [Unreadable]"); }
+                        break;
+
+                    case OlRuleConditionType.olConditionMessageHeader:
+                        var headerCondition = condition as TextRuleCondition;
+                        if (headerCondition?.Text is string[] headerTexts && headerTexts.Length > 0)
+                            explanations.Add($"Header contains \"{string.Join(", ", headerTexts)}\"");
+                        break;
+
+                    case OlRuleConditionType.olConditionImportance:
+                        try
+                        {
+                            dynamic impCondition = condition;
+                            explanations.Add($"Importance is {impCondition.Importance}");
+                        }
+                        catch { explanations.Add("Importance filter"); }
+                        break;
+
+                    case OlRuleConditionType.olConditionHasAttachment:
+                        explanations.Add("Has attachment");
+                        break;
+
+                    case OlRuleConditionType.olConditionCc:
+                        explanations.Add("I'm on CC");
+                        break;
+
+                    case OlRuleConditionType.olConditionToOrCc:
+                        explanations.Add("I'm on To or CC");
+                        break;
+
+                    default:
+                        explanations.Add(condition.ConditionType.ToString().Replace("olCondition", ""));
+                        break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error reading conditions: {ex.Message}");
+        }
+
+        return explanations.Count > 0 ? string.Join("; ", explanations) : "";
+    }
+
+    /// <summary>
+    /// Get human-readable descriptions of enabled rule actions.
+    /// </summary>
+    private string GetEnabledActions(RuleActions actions)
+    {
+        var list = new List<string>();
+
+        try
+        {
+            if (actions.AssignToCategory?.Enabled == true)
+            {
+                try
+                {
+                    var cats = actions.AssignToCategory.Categories as string[];
+                    list.Add(cats?.Length > 0 ? $"Categorize as \"{string.Join(", ", cats)}\"" : "Assign to category");
+                }
+                catch { list.Add("Assign to category"); }
+            }
+
+            if (actions.CopyToFolder?.Enabled == true)
+            {
+                try
+                {
+                    var folder = actions.CopyToFolder.Folder;
+                    list.Add(folder != null ? $"Copy to \"{folder.Name}\"" : "Copy to folder");
+                    if (folder != null) Marshal.ReleaseComObject(folder);
+                }
+                catch { list.Add("Copy to folder"); }
+            }
+
+            if (actions.Delete?.Enabled == true)
+                list.Add("Delete");
+
+            if (actions.DeletePermanently?.Enabled == true)
+                list.Add("Delete permanently");
+
+            if (actions.Forward?.Enabled == true)
+            {
+                try
+                {
+                    var recipients = actions.Forward.Recipients;
+                    list.Add($"Forward to \"{GetRecipientNames(recipients)}\"");
+                    Marshal.ReleaseComObject(recipients);
+                }
+                catch { list.Add("Forward"); }
+            }
+
+            if (actions.ForwardAsAttachment?.Enabled == true)
+                list.Add("Forward as attachment");
+
+            if (actions.MarkAsTask?.Enabled == true)
+                list.Add("Mark as task");
+
+            if (actions.MoveToFolder?.Enabled == true)
+            {
+                try
+                {
+                    var folder = actions.MoveToFolder.Folder;
+                    list.Add(folder != null ? $"Move to \"{folder.Name}\"" : "Move to folder");
+                    if (folder != null) Marshal.ReleaseComObject(folder);
+                }
+                catch { list.Add("Move to folder"); }
+            }
+
+            if (actions.NewItemAlert?.Enabled == true)
+                list.Add("New item alert");
+
+            if (actions.NotifyDelivery?.Enabled == true)
+                list.Add("Notify delivery");
+
+            if (actions.NotifyRead?.Enabled == true)
+                list.Add("Notify read");
+
+            if (actions.PlaySound?.Enabled == true)
+                list.Add("Play sound");
+
+            if (actions.Redirect?.Enabled == true)
+                list.Add("Redirect");
+
+            if (actions.Stop?.Enabled == true)
+                list.Add("Stop processing more rules");
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error reading actions: {ex.Message}");
+        }
+
+        return string.Join("; ", list);
+    }
+
+    /// <summary>
+    /// Extract names from a Recipients COM collection.
+    /// </summary>
+    private static string GetRecipientNames(Recipients recipients)
+    {
+        var names = new List<string>();
+        foreach (Recipient recipient in recipients)
+        {
+            names.Add(recipient.Name);
+            Marshal.ReleaseComObject(recipient);
+        }
+        return string.Join(", ", names);
+    }
+
+    /// <summary>
+    /// Send an email via Outlook COM
+    /// </summary>
+    public SendMailResult SendMail(string to, string subject, string body, string[]? attachmentPaths = null)
+    {
+        Connect();
+
+        MailItem? mail = null;
+        try
+        {
+            mail = (MailItem)_outlookApp!.CreateItem(OlItemType.olMailItem);
+            mail.To = to;
+            mail.Subject = subject;
+            mail.Body = body;
+
+            if (attachmentPaths != null)
+            {
+                foreach (var filePath in attachmentPaths)
+                {
+                    if (File.Exists(filePath))
+                    {
+                        mail.Attachments.Add(filePath, OlAttachmentType.olByValue);
+                        _log?.Invoke($"Attached: {Path.GetFileName(filePath)}");
+                    }
+                    else
+                    {
+                        _log?.Invoke($"Attachment not found: {filePath}");
+                    }
+                }
+            }
+
+            mail.Send();
+            _log?.Invoke($"Feedback email sent to {to}");
+            return new SendMailResult { Success = true };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error sending mail: {ex.Message}");
+            return new SendMailResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (mail != null) Marshal.ReleaseComObject(mail);
+        }
+    }
+
+    /// <summary>
+    /// Get detailed rule information for editing
+    /// </summary>
+    public RuleDetailsResult GetRuleDetails(string ruleName)
+    {
+        if (string.IsNullOrEmpty(ruleName))
+            return new RuleDetailsResult { Success = false, Error = "Rule name is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            for (int i = 1; i <= rules.Count; i++)
+            {
+                var rule = rules[i];
+                try
+                {
+                    if (!string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Marshal.ReleaseComObject(rule);
+                        continue;
+                    }
+
+                    var properties = new List<RulePropertyInfo>();
+
+                    // Extract conditions
+                    ExtractConditionProperties(rule.Conditions, "condition", properties);
+
+                    // Extract actions
+                    ExtractActionProperties(rule.Actions, properties);
+
+                    // Extract exceptions
+                    ExtractConditionProperties(rule.Exceptions, "exception", properties);
+
+                    var result = new RuleDetailsResult
+                    {
+                        Success = true,
+                        Name = rule.Name,
+                        Enabled = rule.Enabled,
+                        ExecutionOrder = rule.ExecutionOrder,
+                        RuleType = rule.RuleType.ToString(),
+                        Properties = properties.ToArray()
+                    };
+
+                    Marshal.ReleaseComObject(rule);
+                    return result;
+                }
+                catch
+                {
+                    Marshal.ReleaseComObject(rule);
+                    throw;
+                }
+            }
+
+            return new RuleDetailsResult { Success = false, Error = $"Rule '{ruleName}' not found" };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error getting rule details: {ex.Message}");
+            return new RuleDetailsResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
+    private void ExtractConditionProperties(RuleConditions conditions, string category, List<RulePropertyInfo> properties)
+    {
+        try
+        {
+            // Subject text
+            try
+            {
+                var subj = conditions.Subject;
+                if (subj != null)
+                {
+                    var texts = subj.Text as string[] ?? Array.Empty<string>();
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "Subject contains",
+                        Key = $"{category}.subject",
+                        Type = "text",
+                        Value = string.Join(", ", texts),
+                        Enabled = subj.Enabled,
+                        Editable = true
+                    });
+                }
+            }
+            catch { }
+
+            // Body text
+            try
+            {
+                var body = conditions.Body;
+                if (body != null)
+                {
+                    var texts = body.Text as string[] ?? Array.Empty<string>();
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "Body contains",
+                        Key = $"{category}.body",
+                        Type = "text",
+                        Value = string.Join(", ", texts),
+                        Enabled = body.Enabled,
+                        Editable = true
+                    });
+                }
+            }
+            catch { }
+
+            // Message header text
+            try
+            {
+                var header = conditions.MessageHeader;
+                if (header != null)
+                {
+                    var texts = header.Text as string[] ?? Array.Empty<string>();
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "Header contains",
+                        Key = $"{category}.header",
+                        Type = "text",
+                        Value = string.Join(", ", texts),
+                        Enabled = header.Enabled,
+                        Editable = true
+                    });
+                }
+            }
+            catch { }
+
+            // From recipients (read-only)
+            try
+            {
+                dynamic fromCond = conditions.From;
+                if (fromCond != null && fromCond.Enabled)
+                {
+                    Recipients recipients = fromCond.Recipients;
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "From",
+                        Key = $"{category}.from",
+                        Type = "recipients",
+                        Value = GetRecipientNames(recipients),
+                        Enabled = true,
+                        Editable = false
+                    });
+                    Marshal.ReleaseComObject(recipients);
+                }
+            }
+            catch { }
+
+            // Sent to recipients (read-only)
+            try
+            {
+                dynamic sentTo = conditions.SentTo;
+                if (sentTo != null && sentTo.Enabled)
+                {
+                    Recipients recipients = sentTo.Recipients;
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "Sent to",
+                        Key = $"{category}.sentTo",
+                        Type = "recipients",
+                        Value = GetRecipientNames(recipients),
+                        Enabled = true,
+                        Editable = false
+                    });
+                    Marshal.ReleaseComObject(recipients);
+                }
+            }
+            catch { }
+
+            // Toggle conditions
+            try
+            {
+                if (conditions.OnlyToMe?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = category, Name = "Sent only to me", Key = $"{category}.onlyToMe", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (conditions.CC?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = category, Name = "I'm on CC", Key = $"{category}.cc", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (conditions.ToOrCc?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = category, Name = "I'm on To or CC", Key = $"{category}.toOrCc", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (conditions.HasAttachment?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = category, Name = "Has attachment", Key = $"{category}.hasAttachment", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            // Importance
+            try
+            {
+                dynamic impCond = conditions.Importance;
+                if (impCond != null && impCond.Enabled)
+                {
+                    properties.Add(new RulePropertyInfo
+                    {
+                        Category = category,
+                        Name = "Importance",
+                        Key = $"{category}.importance",
+                        Type = "text",
+                        Value = impCond.Importance.ToString(),
+                        Enabled = true,
+                        Editable = false
+                    });
+                }
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error extracting {category} properties: {ex.Message}");
+        }
+    }
+
+    private void ExtractActionProperties(RuleActions actions, List<RulePropertyInfo> properties)
+    {
+        try
+        {
+            // Move to folder (read-only, folder selection is complex)
+            try
+            {
+                if (actions.MoveToFolder?.Enabled == true)
+                {
+                    var folder = actions.MoveToFolder.Folder;
+                    var folderName = folder?.Name ?? "Unknown";
+                    if (folder != null) Marshal.ReleaseComObject(folder);
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Move to folder", Key = "action.moveToFolder", Type = "folder", Value = folderName, Enabled = true, Editable = false });
+                }
+            }
+            catch { }
+
+            // Copy to folder (read-only)
+            try
+            {
+                if (actions.CopyToFolder?.Enabled == true)
+                {
+                    var folder = actions.CopyToFolder.Folder;
+                    var folderName = folder?.Name ?? "Unknown";
+                    if (folder != null) Marshal.ReleaseComObject(folder);
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Copy to folder", Key = "action.copyToFolder", Type = "folder", Value = folderName, Enabled = true, Editable = false });
+                }
+            }
+            catch { }
+
+            // Forward to (read-only)
+            try
+            {
+                if (actions.Forward?.Enabled == true)
+                {
+                    var recipients = actions.Forward.Recipients;
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Forward to", Key = "action.forward", Type = "recipients", Value = GetRecipientNames(recipients), Enabled = true, Editable = false });
+                    Marshal.ReleaseComObject(recipients);
+                }
+            }
+            catch { }
+
+            // Assign to category (editable)
+            try
+            {
+                if (actions.AssignToCategory?.Enabled == true)
+                {
+                    var cats = actions.AssignToCategory.Categories as string[] ?? Array.Empty<string>();
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Assign category", Key = "action.category", Type = "text", Value = string.Join(", ", cats), Enabled = true, Editable = true });
+                }
+            }
+            catch { }
+
+            // Toggle actions
+            try
+            {
+                if (actions.Delete?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Delete", Key = "action.delete", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (actions.DeletePermanently?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Delete permanently", Key = "action.deletePermanently", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (actions.Stop?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Stop processing more rules", Key = "action.stop", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (actions.MarkAsTask?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Mark as task", Key = "action.markAsTask", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+
+            try
+            {
+                if (actions.PlaySound?.Enabled == true)
+                    properties.Add(new RulePropertyInfo { Category = "action", Name = "Play sound", Key = "action.playSound", Type = "toggle", Value = "true", Enabled = true, Editable = true });
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error extracting action properties: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Update a specific property of a rule
+    /// </summary>
+    public RuleOperationResult UpdateRuleProperty(string ruleName, string property, string value)
+    {
+        if (string.IsNullOrEmpty(ruleName))
+            return new RuleOperationResult { Success = false, Error = "Rule name is empty" };
+        if (string.IsNullOrEmpty(property))
+            return new RuleOperationResult { Success = false, Error = "Property is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            for (int i = 1; i <= rules.Count; i++)
+            {
+                var rule = rules[i];
+                try
+                {
+                    if (!string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Marshal.ReleaseComObject(rule);
+                        continue;
+                    }
+
+                    ApplyRulePropertyUpdate(rule, property, value);
+                    rules.Save();
+                    _log?.Invoke($"Updated rule '{ruleName}' property '{property}' = '{value}'");
+                    Marshal.ReleaseComObject(rule);
+                    return new RuleOperationResult { Success = true };
+                }
+                catch
+                {
+                    Marshal.ReleaseComObject(rule);
+                    throw;
+                }
+            }
+
+            return new RuleOperationResult { Success = false, Error = $"Rule '{ruleName}' not found" };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error updating rule property: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
+    private void ApplyRulePropertyUpdate(Rule rule, string property, string value)
+    {
+        var parts = property.Split('.');
+        if (parts.Length < 2)
+            throw new ArgumentException($"Invalid property format: {property}");
+
+        var category = parts[0]; // condition, action, exception
+        var propName = parts[1]; // subject, body, header, stop, delete, etc.
+
+        // Parse text values as comma-separated array
+        string[] textValues = value.Split(',').Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToArray();
+        bool boolValue = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+        if (category == "condition" || category == "exception")
+        {
+            var conditions = category == "condition" ? rule.Conditions : rule.Exceptions;
+            switch (propName)
+            {
+                case "subject":
+                    conditions.Subject.Text = textValues;
+                    conditions.Subject.Enabled = textValues.Length > 0;
+                    break;
+                case "body":
+                    conditions.Body.Text = textValues;
+                    conditions.Body.Enabled = textValues.Length > 0;
+                    break;
+                case "header":
+                    conditions.MessageHeader.Text = textValues;
+                    conditions.MessageHeader.Enabled = textValues.Length > 0;
+                    break;
+                case "onlyToMe":
+                    conditions.OnlyToMe.Enabled = boolValue;
+                    break;
+                case "cc":
+                    conditions.CC.Enabled = boolValue;
+                    break;
+                case "toOrCc":
+                    conditions.ToOrCc.Enabled = boolValue;
+                    break;
+                case "hasAttachment":
+                    conditions.HasAttachment.Enabled = boolValue;
+                    break;
+                default:
+                    throw new ArgumentException($"Unknown condition property: {propName}");
+            }
+        }
+        else if (category == "action")
+        {
+            switch (propName)
+            {
+                case "category":
+                    rule.Actions.AssignToCategory.Categories = textValues;
+                    rule.Actions.AssignToCategory.Enabled = textValues.Length > 0;
+                    break;
+                case "delete":
+                    rule.Actions.Delete.Enabled = boolValue;
+                    break;
+                case "deletePermanently":
+                    rule.Actions.DeletePermanently.Enabled = boolValue;
+                    break;
+                case "stop":
+                    rule.Actions.Stop.Enabled = boolValue;
+                    break;
+                case "markAsTask":
+                    rule.Actions.MarkAsTask.Enabled = boolValue;
+                    break;
+                case "playSound":
+                    rule.Actions.PlaySound.Enabled = boolValue;
+                    break;
+                default:
+                    throw new ArgumentException($"Unknown action property: {propName}");
+            }
+        }
+        else
+        {
+            throw new ArgumentException($"Unknown category: {category}");
         }
     }
 
@@ -1148,4 +2150,38 @@ public class MarkReadResult
     public bool Success { get; set; }
     public bool IsRead { get; set; }
     public string? Error { get; set; }
+}
+
+public class RuleOperationResult
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+}
+
+public class SendMailResult
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+}
+
+public class RuleDetailsResult
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public string Name { get; set; } = "";
+    public bool Enabled { get; set; }
+    public int ExecutionOrder { get; set; }
+    public string RuleType { get; set; } = "";
+    public RulePropertyInfo[] Properties { get; set; } = Array.Empty<RulePropertyInfo>();
+}
+
+public class RulePropertyInfo
+{
+    public string Category { get; set; } = "";  // "condition", "action", "exception"
+    public string Name { get; set; } = "";      // display name
+    public string Key { get; set; } = "";       // property key for updates
+    public string Type { get; set; } = "";      // "text", "toggle", "recipients", "folder"
+    public string Value { get; set; } = "";     // current value
+    public bool Enabled { get; set; }           // whether currently enabled
+    public bool Editable { get; set; }          // whether editable through API
 }

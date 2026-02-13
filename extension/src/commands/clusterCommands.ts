@@ -383,6 +383,73 @@ export function registerClusterCommands(
         })
     );
 
+    // Set Default Area Path (for ADO)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.setDefaultAreaPath', async (item) => {
+            let projectName: string | undefined;
+
+            // Get project from tree item if provided (DatabaseTreeItem or AreaPathTreeItem)
+            if (item?.cluster) {
+                const cluster = item.cluster as ClusterInfo;
+                if (cluster.type !== 'ado') {
+                    vscode.window.showWarningMessage('Default Area Path is only applicable for Azure DevOps data sources.');
+                    return;
+                }
+                projectName = cluster.database; // database = project for ADO
+            }
+
+            // Prompt for area path
+            const config = vscode.workspace.getConfiguration('queryStudio.ado');
+            const currentAreaPath = config.get<string>('defaultAreaPath') || '';
+
+            // Suggest the project name as default if no current value
+            const placeholder = projectName
+                ? `e.g., ${projectName}\\Team\\Sprint`
+                : 'e.g., MyProject\\Team\\Sprint';
+
+            const areaPath = await vscode.window.showInputBox({
+                prompt: 'Enter the default Area Path for WIQL queries',
+                placeHolder: placeholder,
+                value: currentAreaPath || projectName || '',
+                ignoreFocusOut: true
+            });
+
+            if (areaPath === undefined) {
+                return; // User cancelled
+            }
+
+            try {
+                // Update the setting (empty string clears it)
+                await config.update('defaultAreaPath', areaPath || undefined, vscode.ConfigurationTarget.Global);
+                clusterProvider.refresh();
+
+                if (areaPath) {
+                    vscode.window.showInformationMessage(`Default Area Path set to: ${areaPath}`);
+                } else {
+                    vscode.window.showInformationMessage('Default Area Path cleared.');
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                vscode.window.showErrorMessage(`Failed to update setting: ${message}`);
+            }
+        })
+    );
+
+    // Clear Default Area Path
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.clearDefaultAreaPath', async () => {
+            try {
+                const config = vscode.workspace.getConfiguration('queryStudio.ado');
+                await config.update('defaultAreaPath', undefined, vscode.ConfigurationTarget.Global);
+                clusterProvider.refresh();
+                vscode.window.showInformationMessage('Default Area Path cleared.');
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                vscode.window.showErrorMessage(`Failed to clear setting: ${message}`);
+            }
+        })
+    );
+
     // Export All Clusters
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.exportAllClusters', async () => {

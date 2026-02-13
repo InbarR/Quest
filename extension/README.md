@@ -52,7 +52,7 @@ A powerful VS Code extension for querying multiple data sources with AI assistan
 | `Ctrl+Enter` | Run Query |
 | `Shift+F5` | Cancel Query |
 | `Ctrl+Shift+S` | Save as Favorite |
-| `Ctrl+Shift+A` | Open AI Chat |
+| `Ctrl+Shift+C` | Open AI Chat |
 
 ## Query Languages
 

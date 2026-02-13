@@ -285,6 +285,18 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.setDefaultAreaPath",
+        "title": "Set Default Area Path...",
+        "icon": "$(bookmark)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.clearDefaultAreaPath",
+        "title": "Clear Area Path",
+        "icon": "$(close)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.toggleFavorite",
         "title": "Toggle Favorite",
         "icon": "$(star)",
@@ -384,6 +396,21 @@
         "command": "queryStudio.toggleMode",
         "title": "Toggle Kusto/ADO Mode",
         "icon": "$(arrow-swap)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.switchToKusto",
+        "title": "Switch to Kusto Mode",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.switchToAdo",
+        "title": "Switch to ADO Mode",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.switchToOutlook",
+        "title": "Switch to Outlook Mode",
         "category": "Quest"
       },
       {
@@ -500,8 +527,20 @@
       },
       {
         "command": "queryStudio.aiChat",
-        "key": "ctrl+shift+a",
+        "key": "ctrl+shift+c",
         "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+      },
+      {
+        "command": "queryStudio.switchToKusto",
+        "key": "ctrl+shift+k"
+      },
+      {
+        "command": "queryStudio.switchToAdo",
+        "key": "ctrl+shift+a"
+      },
+      {
+        "command": "queryStudio.switchToOutlook",
+        "key": "ctrl+shift+o"
       },
       {
         "command": "queryStudio.reportIssue",
@@ -592,6 +631,10 @@
         {
           "command": "queryStudio.showExample",
           "group": "4_help@1"
+        },
+        {
+          "command": "queryStudio.reportIssue",
+          "group": "5_feedback@1"
         }
       ],
       "editor/context": [
@@ -703,6 +746,31 @@
           "command": "queryStudio.removeCluster",
           "when": "view == querystudio.clusters && viewItem == database",
           "group": "2_modify@2"
+        },
+        {
+          "command": "queryStudio.setDefaultAreaPath",
+          "when": "view == querystudio.clusters && viewItem == adoDatabase",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.renameCluster",
+          "when": "view == querystudio.clusters && viewItem == adoDatabase",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "queryStudio.removeCluster",
+          "when": "view == querystudio.clusters && viewItem == adoDatabase",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "queryStudio.setDefaultAreaPath",
+          "when": "view == querystudio.clusters && viewItem == areaPath",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.clearDefaultAreaPath",
+          "when": "view == querystudio.clusters && viewItem == areaPath",
+          "group": "1_actions@2"
         },
         {
           "command": "queryStudio.loadPreset",
@@ -920,7 +988,7 @@
           {
             "id": "shortcuts",
             "title": "Keyboard Shortcuts",
-            "description": "Master Quest with these shortcuts:\n\n| Shortcut | Action |\n|----------|--------|\n| **F5** | Run Query |\n| **Shift+F5** | Cancel Query |\n| **Ctrl+Shift+S** | Save as Favorite |\n| **Ctrl+Shift+A** | Open AI Chat |\n| **Ctrl+Alt+M** | Toggle Mode |\n| **Ctrl+Shift+/** | Show All Shortcuts |\n\n[Show All Shortcuts](command:queryStudio.showKeyboardShortcuts)",
+            "description": "Master Quest with these shortcuts:\n\n| Shortcut | Action |\n|----------|--------|\n| **F5** | Run Query |\n| **Shift+F5** | Cancel Query |\n| **Ctrl+Shift+S** | Save as Favorite |\n| **Ctrl+Shift+K** | Kusto Mode |\n| **Ctrl+Shift+A** | ADO Mode |\n| **Ctrl+Shift+O** | Outlook Mode |\n| **Ctrl+Alt+M** | Toggle Mode |\n| **Ctrl+Shift+C** | Open AI Chat |\n| **Ctrl+Shift+/** | Show All Shortcuts |\n\n[Show All Shortcuts](command:queryStudio.showKeyboardShortcuts)",
             "media": {
               "markdown": "resources/walkthrough/shortcuts.md"
             }

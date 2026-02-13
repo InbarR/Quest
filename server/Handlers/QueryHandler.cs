@@ -110,7 +110,7 @@ public class QueryHandler : IDisposable
                 Query = request.Query,
                 ClusterUrl = request.ClusterUrl,
                 Database = request.Database,
-                MaxResults = request.MaxResults ?? dataSource.UIConfig.DefaultMaxResults,
+                MaxResults = (request.MaxResults is null or 0) ? int.MaxValue : request.MaxResults.Value,
                 TimeoutMs = request.Timeout
             };
 

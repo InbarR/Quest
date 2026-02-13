@@ -90,6 +90,10 @@ export interface AiChatRequest {
         recentQueries?: string[];  // Array of recent query snippets
         personaInstructions?: string;  // Custom persona system prompt
         systemPromptOverride?: string;  // Full system prompt override
+        adoContext?: {
+            defaultAreaPath?: string;
+            defaultProject?: string;
+        };
     };
     sessionId?: string;
 }
@@ -138,6 +142,43 @@ export interface MarkReadResult {
     success: boolean;
     isRead: boolean;
     error?: string;
+}
+
+export interface RuleOperationResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface SendMailRequest {
+    to: string;
+    subject: string;
+    body: string;
+    attachments?: string[];
+}
+
+export interface SendMailResult {
+    success: boolean;
+    error?: string;
+}
+
+export interface RuleDetailsResult {
+    success: boolean;
+    error?: string;
+    name: string;
+    enabled: boolean;
+    executionOrder: number;
+    ruleType: string;
+    properties: RulePropertyInfo[];
+}
+
+export interface RulePropertyInfo {
+    category: string;   // "condition", "action", "exception"
+    name: string;       // display name
+    key: string;        // property key for updates
+    type: string;       // "text", "toggle", "recipients", "folder"
+    value: string;      // current value
+    enabled: boolean;
+    editable: boolean;
 }
 
 export interface ExtractDataSourceFromImageRequest {
@@ -389,6 +430,34 @@ export class SidecarClient {
 
     async markEmailRead(entryId: string, markAsRead: boolean): Promise<MarkReadResult> {
         return this.sendRequest('outlook/markRead', { entryId, markAsRead });
+    }
+
+    async openRulesEditor(): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/openRulesEditor', {});
+    }
+
+    async renameRule(currentName: string, newName: string): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/renameRule', { currentName, newName });
+    }
+
+    async setRuleEnabled(ruleName: string, enabled: boolean): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/setRuleEnabled', { ruleName, enabled });
+    }
+
+    async deleteRule(ruleName: string): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/deleteRule', { ruleName });
+    }
+
+    async sendMail(to: string, subject: string, body: string, attachments?: string[]): Promise<SendMailResult> {
+        return this.sendRequest('outlook/sendMail', { to, subject, body, attachments });
+    }
+
+    async getRuleDetails(ruleName: string): Promise<RuleDetailsResult> {
+        return this.sendRequest('outlook/getRuleDetails', { ruleName });
+    }
+
+    async updateRuleProperty(ruleName: string, property: string, value: string): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/updateRuleProperty', { ruleName, property, value });
     }
 
     /**

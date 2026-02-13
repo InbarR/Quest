@@ -222,6 +222,7 @@ public class SimpleJsonRpcServer
     public async Task RunAsync(CancellationToken ct)
     {
         using var reader = new StreamReader(Console.OpenStandardInput());
+        var writeLock = new SemaphoreSlim(1, 1);
 
         while (!ct.IsCancellationRequested)
         {
@@ -230,16 +231,30 @@ public class SimpleJsonRpcServer
 
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            try
+            // Process each request concurrently so long-running queries
+            // don't block other operations (health checks, feedback, etc.)
+            var requestLine = line;
+            _ = Task.Run(async () =>
             {
-                var response = await ProcessRequestAsync(line, ct);
-                Console.WriteLine(response);
-                Console.Out.Flush();
-            }
-            catch (Exception ex)
-            {
-                _log($"Error processing request: {ex.Message}");
-            }
+                try
+                {
+                    var response = await ProcessRequestAsync(requestLine, ct);
+                    await writeLock.WaitAsync(ct);
+                    try
+                    {
+                        Console.WriteLine(response);
+                        Console.Out.Flush();
+                    }
+                    finally
+                    {
+                        writeLock.Release();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log($"Error processing request: {ex.Message}");
+                }
+            });
         }
     }
 
@@ -297,6 +312,13 @@ public class SimpleJsonRpcServer
                 "outlook/openItem" => OpenOutlookItem(paramsElement),
                 "outlook/getPreview" => GetMailPreview(paramsElement),
                 "outlook/markRead" => MarkEmailRead(paramsElement),
+                "outlook/openRulesEditor" => OpenRulesEditor(),
+                "outlook/renameRule" => RenameRule(paramsElement),
+                "outlook/setRuleEnabled" => SetRuleEnabled(paramsElement),
+                "outlook/deleteRule" => DeleteRule(paramsElement),
+                "outlook/sendMail" => SendMail(paramsElement),
+                "outlook/getRuleDetails" => GetRuleDetails(paramsElement),
+                "outlook/updateRuleProperty" => UpdateRuleProperty(paramsElement),
                 _ => throw new Exception($"Unknown method: {method}")
             };
 
@@ -652,6 +674,59 @@ public class SimpleJsonRpcServer
         var markAsRead = p.GetProperty("markAsRead").GetBoolean();
         return _outlook.MarkAsRead(entryId, markAsRead);
     }
+
+    private object? OpenRulesEditor()
+    {
+        return _outlook.OpenRulesEditor();
+    }
+
+    private object? RenameRule(JsonElement p)
+    {
+        var currentName = p.GetProperty("currentName").GetString()!;
+        var newName = p.GetProperty("newName").GetString()!;
+        return _outlook.RenameRule(currentName, newName);
+    }
+
+    private object? SetRuleEnabled(JsonElement p)
+    {
+        var ruleName = p.GetProperty("ruleName").GetString()!;
+        var enabled = p.GetProperty("enabled").GetBoolean();
+        return _outlook.SetRuleEnabled(ruleName, enabled);
+    }
+
+    private object? DeleteRule(JsonElement p)
+    {
+        var ruleName = p.GetProperty("ruleName").GetString()!;
+        return _outlook.DeleteRule(ruleName);
+    }
+
+    private object? SendMail(JsonElement p)
+    {
+        var to = p.GetProperty("to").GetString()!;
+        var subject = p.GetProperty("subject").GetString()!;
+        var body = p.GetProperty("body").GetString()!;
+        string[]? attachments = null;
+        if (p.TryGetProperty("attachments", out var att) && att.ValueKind == JsonValueKind.Array)
+        {
+            attachments = att.EnumerateArray().Select(a => a.GetString()!).ToArray();
+        }
+        return _outlook.SendMail(to, subject, body, attachments);
+    }
+
+    private object? GetRuleDetails(JsonElement p)
+    {
+        var ruleName = p.GetProperty("ruleName").GetString()!;
+        return _outlook.GetRuleDetails(ruleName);
+    }
+
+    private object? UpdateRuleProperty(JsonElement p)
+    {
+        var ruleName = p.GetProperty("ruleName").GetString()!;
+        var property = p.GetProperty("property").GetString()!;
+        var value = p.GetProperty("value").GetString()!;
+        return _outlook.UpdateRuleProperty(ruleName, property, value);
+    }
+
 }
 
 /// <summary>

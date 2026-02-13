@@ -28,6 +28,12 @@ let currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
 let queryCounter = 0;
 let resultsProviderInstance: ResultsWebViewProvider;
 
+// Log buffer for feedback attachment (populated via intercepted outputChannel.appendLine)
+const _logBuffer: string[] = [];
+export function getLogContent(): string {
+    return _logBuffer.join('\n');
+}
+
 // Export for use by other modules
 export function getCurrentMode(): 'kusto' | 'ado' | 'outlook' {
     return currentMode;
@@ -90,6 +96,15 @@ function findQueryEditor(): vscode.TextEditor | undefined {
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('Quest');
+
+    // Intercept appendLine to populate log buffer for feedback attachment
+    const originalAppendLine = outputChannel.appendLine.bind(outputChannel);
+    outputChannel.appendLine = (value: string) => {
+        originalAppendLine(value);
+        _logBuffer.push(value);
+        if (_logBuffer.length > 2000) { _logBuffer.splice(0, 500); }
+    };
+
     outputChannel.appendLine('Quest is starting...');
 
     // Set initial context for when clauses
@@ -512,14 +527,14 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('queryStudio.toggleMode', async () => {
             const modes: { label: string; description: string; mode: 'kusto' | 'ado' | 'outlook' }[] = [
                 { label: 'Ⓚ Kusto (KQL)', description: 'Query KQL', mode: 'kusto' },
-                { label: 'Ⓐ Azure DevOps (WIQL)', description: 'Query work items', mode: 'ado' },
+                { label: 'Ⓐ Azure DevOps (ADO)', description: 'Query work items', mode: 'ado' },
             ];
 
             // Only add Outlook option on Windows
             if (isOutlookSupported) {
-                modes.push({ label: '📧 Outlook (OQL)', description: 'Query mails', mode: 'outlook' });
+                modes.push({ label: '📧 Outlook', description: 'Query mails', mode: 'outlook' });
             } else {
-                modes.push({ label: '📧 Outlook (OQL)', description: '⚠️ Windows only', mode: 'outlook' });
+                modes.push({ label: '📧 Outlook', description: '⚠️ Windows only', mode: 'outlook' });
             }
 
             // Mark current mode
@@ -636,6 +651,15 @@ export async function activate(context: vscode.ExtensionContext) {
             aiChatProvider.setMode(mode);
             outputChannel.appendLine(`Set to ${mode.toUpperCase()} mode`);
         }),
+        vscode.commands.registerCommand('queryStudio.switchToKusto', () => {
+            vscode.commands.executeCommand('queryStudio.setMode', 'kusto');
+        }),
+        vscode.commands.registerCommand('queryStudio.switchToAdo', () => {
+            vscode.commands.executeCommand('queryStudio.setMode', 'ado');
+        }),
+        vscode.commands.registerCommand('queryStudio.switchToOutlook', () => {
+            vscode.commands.executeCommand('queryStudio.setMode', 'outlook');
+        }),
         vscode.commands.registerCommand('queryStudio.newOqlFile', async () => {
             // Check if Outlook is supported on this platform
             if (!isOutlookSupported) {
@@ -675,17 +699,22 @@ export async function activate(context: vscode.ExtensionContext) {
                     { label: 'Join two tables', query: '// Join example\nTable1\n| join kind=inner (Table2) on CommonColumn\n| project Table1.Column1, Table2.Column2' },
                     { label: 'Parse JSON', query: '// Parse JSON column\nTableName\n| extend ParsedJson = parse_json(JsonColumn)\n| project Name = ParsedJson.name, Value = ParsedJson.value' },
                 ],
-                ado: [
-                    { label: 'Active bugs (WIQL)', query: '// Active bugs assigned to me (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State], [System.AssignedTo]\nFROM WorkItems\nWHERE [System.WorkItemType] = \'Bug\'\n  AND [System.State] <> \'Closed\'\n  AND [System.AssignedTo] = @Me\nORDER BY [System.CreatedDate] DESC' },
-                    { label: 'Active bugs (KQL-style)', query: '// Active bugs assigned to me (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Bug"\n| where State != "Closed"\n| where AssignedTo == @Me\n| project Id, Title, State, AssignedTo\n| order by CreatedDate desc' },
-                    { label: 'Sprint work items (WIQL)', query: '// Current sprint items (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]\nFROM WorkItems\nWHERE [System.IterationPath] = @CurrentIteration\nORDER BY [System.WorkItemType]' },
-                    { label: 'Sprint work items (KQL-style)', query: '// Current sprint items (KQL-style syntax)\nWorkItems\n| where IterationPath == @CurrentIteration\n| project Id, Title, State, WorkItemType\n| order by WorkItemType' },
-                    { label: 'Recently changed (WIQL)', query: '// Recently changed items (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.ChangedDate], [System.ChangedBy]\nFROM WorkItems\nWHERE [System.ChangedDate] > @Today - 7\nORDER BY [System.ChangedDate] DESC' },
-                    { label: 'Recently changed (KQL-style)', query: '// Recently changed items (KQL-style syntax)\nWorkItems\n| where ChangedDate > ago(7d)\n| project Id, Title, ChangedDate, ChangedBy\n| order by ChangedDate desc' },
-                    { label: 'Unassigned tasks (WIQL)', query: '// Unassigned tasks (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State]\nFROM WorkItems\nWHERE [System.WorkItemType] = \'Task\'\n  AND [System.AssignedTo] = \'\'\n  AND [System.State] <> \'Closed\'' },
-                    { label: 'Unassigned tasks (KQL-style)', query: '// Unassigned tasks (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Task"\n| where AssignedTo == ""\n| where State != "Closed"\n| project Id, Title, State' },
-                    { label: 'Bugs by priority (KQL-style)', query: '// Bugs grouped by priority (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Bug"\n| where State != "Closed"\n| summarize Count = count() by Priority\n| order by Priority' },
-                ],
+                ado: (() => {
+                    const ap = vscode.workspace.getConfiguration('queryStudio.ado').get<string>('defaultAreaPath');
+                    const wiqlAp = ap ? `\n  AND [System.AreaPath] UNDER '${ap}'` : '';
+                    const kqlAp = ap ? `\n| where AreaPath under "${ap}"` : '';
+                    return [
+                        { label: 'Active bugs (WIQL)', query: `// Active bugs assigned to me (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State], [System.AssignedTo]\nFROM WorkItems\nWHERE [System.WorkItemType] = 'Bug'\n  AND [System.State] <> 'Closed'\n  AND [System.AssignedTo] = @Me${wiqlAp}\nORDER BY [System.CreatedDate] DESC` },
+                        { label: 'Active bugs (KQL-style)', query: `// Active bugs assigned to me (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Bug"\n| where State != "Closed"\n| where AssignedTo == @Me${kqlAp}\n| project Id, Title, State, AssignedTo\n| order by CreatedDate desc` },
+                        { label: 'Sprint work items (WIQL)', query: `// Current sprint items (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State], [System.WorkItemType]\nFROM WorkItems\nWHERE [System.IterationPath] = @CurrentIteration${wiqlAp}\nORDER BY [System.WorkItemType]` },
+                        { label: 'Sprint work items (KQL-style)', query: `// Current sprint items (KQL-style syntax)\nWorkItems\n| where IterationPath == @CurrentIteration${kqlAp}\n| project Id, Title, State, WorkItemType\n| order by WorkItemType` },
+                        { label: 'Recently changed (WIQL)', query: `// Recently changed items (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.ChangedDate], [System.ChangedBy]\nFROM WorkItems\nWHERE [System.ChangedDate] > @Today - 7${wiqlAp}\nORDER BY [System.ChangedDate] DESC` },
+                        { label: 'Recently changed (KQL-style)', query: `// Recently changed items (KQL-style syntax)\nWorkItems\n| where ChangedDate > ago(7d)${kqlAp}\n| project Id, Title, ChangedDate, ChangedBy\n| order by ChangedDate desc` },
+                        { label: 'Unassigned tasks (WIQL)', query: `// Unassigned tasks (WIQL syntax)\nSELECT [System.Id], [System.Title], [System.State]\nFROM WorkItems\nWHERE [System.WorkItemType] = 'Task'\n  AND [System.AssignedTo] = ''\n  AND [System.State] <> 'Closed'${wiqlAp}` },
+                        { label: 'Unassigned tasks (KQL-style)', query: `// Unassigned tasks (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Task"\n| where AssignedTo == ""\n| where State != "Closed"${kqlAp}\n| project Id, Title, State` },
+                        { label: 'Bugs by priority (KQL-style)', query: `// Bugs grouped by priority (KQL-style syntax)\nWorkItems\n| where WorkItemType == "Bug"\n| where State != "Closed"${kqlAp}\n| summarize Count = count() by Priority\n| order by Priority` },
+                    ];
+                })(),
                 outlook: [
                     { label: 'Recent emails', query: '// Recent emails from Inbox\nInbox\n| take 100' },
                     { label: 'Emails from last week', query: '// Emails from the past 7 days\nInbox\n| where ReceivedTime > ago(7d)\n| take 100' },
@@ -697,6 +726,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     { label: 'Sent emails', query: '// Recently sent emails\nSentMail\n| take 100' },
                     { label: 'Contacts', query: '// All contacts\nContacts\n| take 100' },
                     { label: 'Tasks', query: '// All tasks\nTasks\n| take 50' },
+                    { label: 'Mail rules', query: '// Outlook mail rules\nRules\n| take 100' },
                 ]
             };
 
@@ -735,12 +765,16 @@ export async function activate(context: vscode.ExtensionContext) {
                 { key: 'Ctrl+Shift+Enter', description: 'Run Query (same tab)' },
                 { key: 'Shift+F5', description: 'Cancel Query' },
                 { key: 'Ctrl+Shift+S', description: 'Save as Favorite' },
-                { key: 'Ctrl+Shift+A', description: 'Open AI Chat' },
-                { key: 'Ctrl+Alt+M', description: 'Toggle Mode (KQL/WIQL/OQL)' },
+                { key: 'Ctrl+Shift+K', description: 'Switch to Kusto Mode' },
+                { key: 'Ctrl+Shift+A', description: 'Switch to ADO Mode' },
+                { key: 'Ctrl+Shift+O', description: 'Switch to Outlook Mode' },
+                { key: 'Ctrl+Alt+M', description: 'Toggle Mode (KQL/ADO/Outlook)' },
                 { key: 'Ctrl+Alt+P', description: 'Switch Connection Profile' },
                 { key: 'Ctrl+Alt+V', description: 'Paste Data as Table' },
                 { key: 'Ctrl+Shift+/', description: 'Show Keyboard Shortcuts' },
-                { key: 'Ctrl+Shift+B', description: 'Report Issue' },
+                { key: 'Ctrl+Shift+C', description: 'Open AI Chat' },
+                { key: 'Ctrl+Shift+B', description: 'Send Feedback' },
+                { key: 'Ctrl+Enter', description: 'Preview Row (in Results panel)' },
                 { key: 'Ctrl+Space', description: 'Trigger Autocomplete' },
             ];
 
@@ -937,7 +971,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register report issue / feedback command
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.reportIssue', async () => {
-            FeedbackPanel.createOrShow(context.extensionUri);
+            FeedbackPanel.createOrShow(context.extensionUri, sidecar.client);
         })
     );
 
@@ -1198,11 +1232,11 @@ export function updateModeStatusBar(type: 'kusto' | 'ado' | 'outlook' | null, na
         modeStatusBarItem.backgroundColor = undefined;
         modeStatusBarItem.tooltip = name ? `Mode: Kusto (KQL)\nActive: ${name}` : 'Mode: Kusto (KQL)';
     } else if (type === 'ado') {
-        modeStatusBarItem.text = 'Ⓐ WIQL';
+        modeStatusBarItem.text = 'Ⓐ ADO';
         modeStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         modeStatusBarItem.tooltip = name ? `Mode: Azure DevOps (WIQL)\nActive: ${name}` : 'Mode: Azure DevOps (WIQL)';
     } else if (type === 'outlook') {
-        modeStatusBarItem.text = '📧 OQL';
+        modeStatusBarItem.text = '📧 Outlook';
         modeStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
         modeStatusBarItem.tooltip = name ? `Mode: Outlook (OQL)\nActive: ${name}` : 'Mode: Outlook (OQL)\nQueries local Outlook via COM';
     } else {

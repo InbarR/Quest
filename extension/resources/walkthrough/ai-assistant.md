@@ -4,7 +4,7 @@ Get intelligent help writing, fixing, and understanding your queries.
 
 ## AI Chat Panel
 
-Open with **Ctrl+Shift+A** or click the AI Chat icon in the sidebar.
+Open with **Ctrl+Shift+C** or click the AI Chat icon in the sidebar.
 
 ### Chat Toolbar Buttons
 

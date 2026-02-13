@@ -39,12 +39,18 @@ export class DatabaseTreeItem extends vscode.TreeItem {
     constructor(
         public readonly cluster: ClusterInfo,
         public readonly isActive: boolean = false,
-        public readonly tableCount: number = 0
+        public readonly tableCount: number = 0,
+        public readonly areaPath?: string
     ) {
-        super(cluster.database, vscode.TreeItemCollapsibleState.None);
+        // ADO databases with area path are expandable to show it
+        const collapsible = cluster.type === 'ado' && areaPath
+            ? vscode.TreeItemCollapsibleState.Expanded
+            : vscode.TreeItemCollapsibleState.None;
+        super(cluster.database, collapsible);
 
         this.tooltip = `Database: ${cluster.database}\nCluster: ${cluster.url}`;
-        this.contextValue = 'database';
+        // Use type-specific context value for different context menus
+        this.contextValue = cluster.type === 'ado' ? 'adoDatabase' : 'database';
 
         let iconColor: vscode.ThemeColor | undefined;
         const parts: string[] = [];
@@ -68,6 +74,20 @@ export class DatabaseTreeItem extends vscode.TreeItem {
             title: 'Set as Active',
             arguments: [this.cluster]
         };
+    }
+}
+
+export class AreaPathTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly areaPathValue: string,
+        public readonly cluster: ClusterInfo
+    ) {
+        super(areaPathValue, vscode.TreeItemCollapsibleState.None);
+
+        this.tooltip = `Default Area Path: ${areaPathValue}`;
+        this.contextValue = 'areaPath';
+        this.iconPath = new vscode.ThemeIcon('bookmark', new vscode.ThemeColor('descriptionForeground'));
+        this.description = 'Area Path';
     }
 }
 
@@ -204,11 +224,17 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
 
         if (element instanceof ClusterTreeItem) {
             // Show databases under cluster
+            const defaultAreaPath = vscode.workspace.getConfiguration('queryStudio.ado').get<string>('defaultAreaPath');
             return element.databases.map(db => {
                 const isActive = this.activeCluster?.id === db.id;
                 const tableCount = this.getTableCount(db.url, db.database);
-                return new DatabaseTreeItem(db, isActive, tableCount);
+                const areaPath = db.type === 'ado' ? defaultAreaPath : undefined;
+                return new DatabaseTreeItem(db, isActive, tableCount, areaPath);
             });
+        }
+
+        if (element instanceof DatabaseTreeItem && element.areaPath) {
+            return [new AreaPathTreeItem(element.areaPath, element.cluster)];
         }
 
         return [];

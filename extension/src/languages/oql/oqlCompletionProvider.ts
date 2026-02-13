@@ -12,7 +12,8 @@ const OQL_FOLDERS = [
     { name: 'Notes', description: 'Notes' },
     { name: 'Journal', description: 'Journal entries' },
     { name: 'Outbox', description: 'Outgoing messages' },
-    { name: 'Junk', description: 'Junk/Spam mail' }
+    { name: 'Junk', description: 'Junk/Spam mail' },
+    { name: 'Rules', description: 'Outlook mail rules' }
 ];
 
 // Mail fields
@@ -71,6 +72,17 @@ const TASK_FIELDS = [
     { name: 'PercentComplete', description: 'Completion percentage', type: 'int' },
     { name: 'Owner', description: 'Task owner', type: 'string' },
     { name: 'Importance', description: 'Task importance', type: 'string' }
+];
+
+// Rules fields
+const RULES_FIELDS = [
+    { name: 'Name', description: 'Rule name', type: 'string' },
+    { name: 'ExecutionOrder', description: 'Rule execution order', type: 'int' },
+    { name: 'RuleType', description: 'Rule type (Send or Receive)', type: 'string' },
+    { name: 'Conditions', description: 'Rule conditions', type: 'string' },
+    { name: 'Actions', description: 'Rule actions', type: 'string' },
+    { name: 'Exceptions', description: 'Rule exceptions', type: 'string' },
+    { name: 'Enabled', description: 'Whether rule is enabled', type: 'bool' }
 ];
 
 // OQL Operators
@@ -237,7 +249,7 @@ export class OqlCompletionProvider implements vscode.CompletionItemProvider {
 
     private isAfterFieldName(linePrefix: string): boolean {
         // After a field name with space but no operator yet
-        return !!linePrefix.match(/\b(Subject|From|SenderEmail|To|CC|ReceivedTime|SentTime|HasAttachments|AttachmentCount|Importance|UnRead|Body|BodyPreview|Categories|Size|ConversationTopic|Start|End|Location|Organizer|IsRecurring|RecurrenceState|BusyStatus|AllDayEvent|RequiredAttendees|OptionalAttendees|FullName|Email1Address|Email2Address|CompanyName|BusinessPhone|MobilePhone|JobTitle|Department|DueDate|StartDate|Status|PercentComplete|Owner)\s+$/i);
+        return !!linePrefix.match(/\b(Subject|From|SenderEmail|To|CC|ReceivedTime|SentTime|HasAttachments|AttachmentCount|Importance|UnRead|Body|BodyPreview|Categories|Size|ConversationTopic|Start|End|Location|Organizer|IsRecurring|RecurrenceState|BusyStatus|AllDayEvent|RequiredAttendees|OptionalAttendees|FullName|Email1Address|Email2Address|CompanyName|BusinessPhone|MobilePhone|JobTitle|Department|DueDate|StartDate|Status|PercentComplete|Owner|Name|ExecutionOrder|RuleType|Conditions|Actions|Exceptions|Enabled)\s+$/i);
     }
 
     private getFolderCompletions(): vscode.CompletionItem[] {
@@ -272,6 +284,9 @@ export class OqlCompletionProvider implements vscode.CompletionItemProvider {
             case 'tasks':
                 fields = TASK_FIELDS;
                 break;
+            case 'rules':
+                fields = RULES_FIELDS;
+                break;
             default:
                 fields = MAIL_FIELDS;
         }
@@ -298,7 +313,7 @@ export class OqlCompletionProvider implements vscode.CompletionItemProvider {
         const fieldLower = fieldName.toLowerCase();
 
         // Boolean fields
-        if (['hasattachments', 'unread', 'isrecurring', 'alldayevent'].includes(fieldLower)) {
+        if (['hasattachments', 'unread', 'isrecurring', 'alldayevent', 'enabled'].includes(fieldLower)) {
             return BOOL_VALUES.map(v => {
                 const item = new vscode.CompletionItem(v, vscode.CompletionItemKind.Value);
                 item.insertText = v;
@@ -405,6 +420,11 @@ export class OqlCompletionProvider implements vscode.CompletionItemProvider {
                 label: 'Combined Filters',
                 detail: 'Multiple filter conditions',
                 insertText: 'Inbox\n| where Subject contains "${1:keyword}"\n| where ReceivedTime > ago(30d)\n| take 50'
+            },
+            {
+                label: 'Mail Rules',
+                detail: 'Get Outlook mail rules',
+                insertText: 'Rules\n| take 100'
             }
         ];
 

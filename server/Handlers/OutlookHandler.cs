@@ -94,6 +94,48 @@ public class OutlookHandler : IDisposable
         return _outlookService.MarkAsRead(entryId, markAsRead);
     }
 
+    public RuleOperationResult OpenRulesEditor()
+    {
+        _log("Opening Rules and Alerts dialog");
+        return _outlookService.OpenRulesEditor();
+    }
+
+    public RuleOperationResult RenameRule(string currentName, string newName)
+    {
+        _log($"Renaming rule: \"{currentName}\" → \"{newName}\"");
+        return _outlookService.RenameRule(currentName, newName);
+    }
+
+    public RuleOperationResult SetRuleEnabled(string ruleName, bool enabled)
+    {
+        _log($"{(enabled ? "Enabling" : "Disabling")} rule: \"{ruleName}\"");
+        return _outlookService.SetRuleEnabled(ruleName, enabled);
+    }
+
+    public RuleOperationResult DeleteRule(string ruleName)
+    {
+        _log($"Deleting rule: \"{ruleName}\"");
+        return _outlookService.DeleteRule(ruleName);
+    }
+
+    public SendMailResult SendMail(string to, string subject, string body, string[]? attachmentPaths = null)
+    {
+        _log($"Sending mail to: {to}, subject: {subject.Substring(0, Math.Min(50, subject.Length))}...");
+        return _outlookService.SendMail(to, subject, body, attachmentPaths);
+    }
+
+    public RuleDetailsResult GetRuleDetails(string ruleName)
+    {
+        _log($"Getting rule details: \"{ruleName}\"");
+        return _outlookService.GetRuleDetails(ruleName);
+    }
+
+    public RuleOperationResult UpdateRuleProperty(string ruleName, string property, string value)
+    {
+        _log($"Updating rule \"{ruleName}\": {property} = {value}");
+        return _outlookService.UpdateRuleProperty(ruleName, property, value);
+    }
+
     public void Dispose()
     {
         _outlookService.Dispose();
