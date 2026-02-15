@@ -60,7 +60,10 @@ public class AiHandler
                 SuggestedQuery: suggestedQuery
             );
         }
-        catch (MyUtils.AI.DeviceCodeAuthRequiredException)
+        catch (Exception ex) when (ex is MyUtils.AI.DeviceCodeAuthRequiredException
+            || ex.InnerException is MyUtils.AI.DeviceCodeAuthRequiredException
+            || ex.Message.Contains("Device code authentication required", StringComparison.OrdinalIgnoreCase)
+            || ex.InnerException?.Message?.Contains("Device code authentication required", StringComparison.OrdinalIgnoreCase) == true)
         {
             // Token not available - tell extension to authenticate via VS Code
             return new AiChatResponse(
