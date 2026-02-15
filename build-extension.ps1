@@ -47,6 +47,24 @@ if (-not $SkipServer) {
             }
         }
 
+        # Ad-hoc sign macOS binaries to prevent Gatekeeper SIGKILL
+        foreach ($platform in $platforms) {
+            if ($platform.rid -like "osx-*") {
+                $macBinary = Join-Path (Join-Path $serverBaseOutput $platform.rid) "QueryStudio.Server"
+                if (Test-Path $macBinary) {
+                    Write-Host "  Ad-hoc signing $($platform.name) binary..." -ForegroundColor Cyan
+                    if (Get-Command codesign -ErrorAction SilentlyContinue) {
+                        codesign --force --deep --sign - $macBinary
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Host "  Warning: codesign failed for $($platform.rid) - Mac users may need to run: xattr -dr com.apple.quarantine <path>" -ForegroundColor Yellow
+                        }
+                    } else {
+                        Write-Host "  Warning: codesign not available (not on macOS). Mac users may need to run: xattr -dr com.apple.quarantine <path>" -ForegroundColor Yellow
+                    }
+                }
+            }
+        }
+
         Write-Host "Server built successfully for all platforms" -ForegroundColor Green
     }
     finally {

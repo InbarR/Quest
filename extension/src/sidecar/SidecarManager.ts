@@ -178,13 +178,22 @@ export class SidecarManager {
             execSync(`chmod +x "${filePath}"`, { stdio: 'ignore' });
             this.outputChannel.appendLine(`Set executable permission on ${filePath}`);
 
-            // On macOS, remove quarantine attribute to avoid Gatekeeper issues
+            // On macOS, recursively remove quarantine attribute from the binary and its directory
+            // to avoid Gatekeeper SIGKILL on unsigned binaries
             if (process.platform === 'darwin') {
                 try {
-                    execSync(`xattr -d com.apple.quarantine "${filePath}"`, { stdio: 'ignore' });
-                    this.outputChannel.appendLine(`Removed quarantine attribute`);
+                    const dirPath = require('path').dirname(filePath);
+                    execSync(`xattr -dr com.apple.quarantine "${dirPath}"`, { stdio: 'ignore' });
+                    this.outputChannel.appendLine(`Removed quarantine attribute from ${dirPath}`);
                 } catch {
                     // Attribute may not exist, which is fine
+                }
+                // Ad-hoc sign if not already signed
+                try {
+                    execSync(`codesign --force --deep --sign - "${filePath}"`, { stdio: 'ignore' });
+                    this.outputChannel.appendLine(`Ad-hoc signed ${filePath}`);
+                } catch {
+                    this.outputChannel.appendLine(`Warning: codesign failed, binary may be blocked by Gatekeeper`);
                 }
             }
         } catch (error) {
