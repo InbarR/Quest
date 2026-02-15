@@ -2,6 +2,32 @@
 
 All notable changes to the "Quest" extension will be documented in this file.
 
+## [0.6.2] - 2026-02-15
+
+### Added
+
+- **Multi-Cluster Screenshot Extraction** - "From Screenshot" now detects ALL clusters and databases in the image, with a multi-select picker to choose which to add
+- **Get Databases** - Right-click a cluster to discover and add databases from the server
+- **Show Tables** - Right-click a database to list its tables in the tree (uses cached schema when available)
+- **Click Table to Insert** - Click a table name in the tree to insert it into the active query editor
+- **Edit Connection** - Right-click any cluster or database to edit its URL, database, and display name
+- **Multi-Select Remove** - Select multiple data sources and remove them all at once
+- **Data Sources Filter** - Search icon in the title bar to filter clusters by name, database, or URL
+- **Mode in Panel Title** - Data Sources title now shows the current mode (KQL / ADO / Outlook)
+- **Keyboard Shortcuts Filter** - Search input to quickly find shortcuts in the keyboard shortcuts panel
+- **Copy Connection Info** - Now works on both cluster and individual database nodes, with confirmation toast
+
+### Fixed
+
+- **Query Type from Mode, Not File** - Current mode now always determines query type, regardless of file extension (.wiql files no longer force ADO mode)
+- **Mail Preview** - Preview now works even when queries use `| project` without EntryId
+- **Dot in Cluster Name** - Names like `m365dprd.westeurope` now correctly resolve to `.kusto.windows.net`
+- **Panels Load Empty** - Favorites, History, and Data Sources now refresh when the sidecar server connects
+
+### Changed
+
+- **Fetch Schema Button** - Removed from title bar (still available in database right-click menu)
+
 ## [0.5.6] - 2026-02-07
 
 ### Added

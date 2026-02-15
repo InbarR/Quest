@@ -26,6 +26,7 @@ if (-not $SkipServer) {
     # Build for each platform
     $platforms = @(
         @{ rid = "win-x64"; name = "Windows x64" },
+        @{ rid = "win-arm64"; name = "Windows ARM64" },
         @{ rid = "osx-x64"; name = "macOS Intel" },
         @{ rid = "osx-arm64"; name = "macOS Apple Silicon" }
     )
