@@ -121,6 +121,8 @@ public record ExtractDataSourceFromImageRequest(
     string Mode  // "kusto" or "ado"
 );
 
+public record ExtractedClusterItem(string ClusterUrl, string[] Databases, string? DisplayName);
+
 public record ExtractedDataSourceInfo(
     bool Success,
     string? ClusterUrl,
@@ -129,7 +131,8 @@ public record ExtractedDataSourceInfo(
     string? Organization,
     string Type,
     string? Error,
-    float Confidence
+    float Confidence,
+    ExtractedClusterItem[]? Clusters = null
 );
 
 // Kusto Explorer import

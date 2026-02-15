@@ -40,12 +40,15 @@ export class DatabaseTreeItem extends vscode.TreeItem {
         public readonly cluster: ClusterInfo,
         public readonly isActive: boolean = false,
         public readonly tableCount: number = 0,
-        public readonly areaPath?: string
+        public readonly areaPath?: string,
+        public readonly hasTableNames: boolean = false
     ) {
-        // ADO databases with area path are expandable to show it
-        const collapsible = cluster.type === 'ado' && areaPath
-            ? vscode.TreeItemCollapsibleState.Expanded
-            : vscode.TreeItemCollapsibleState.None;
+        // Expandable if: ADO with area path, or has loaded table names
+        const collapsible = hasTableNames
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : (cluster.type === 'ado' && areaPath
+                ? vscode.TreeItemCollapsibleState.Expanded
+                : vscode.TreeItemCollapsibleState.None);
         super(cluster.database, collapsible);
 
         this.tooltip = `Database: ${cluster.database}\nCluster: ${cluster.url}`;
@@ -73,6 +76,25 @@ export class DatabaseTreeItem extends vscode.TreeItem {
             command: 'queryStudio.setActiveCluster',
             title: 'Set as Active',
             arguments: [this.cluster]
+        };
+    }
+}
+
+export class TableTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly tableName: string,
+        public readonly cluster: ClusterInfo
+    ) {
+        super(tableName, vscode.TreeItemCollapsibleState.None);
+        this.tooltip = `${tableName}\nClick to insert into query`;
+        this.contextValue = 'table';
+        this.iconPath = new vscode.ThemeIcon('symbol-field', new vscode.ThemeColor('descriptionForeground'));
+
+        // Click inserts table name into active editor
+        this.command = {
+            command: 'queryStudio.insertTableName',
+            title: 'Insert Table Name',
+            arguments: [tableName]
         };
     }
 }
@@ -122,8 +144,19 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
     private activeCluster: ClusterInfo | null = null;
     private currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
     private tableCounts: Map<string, number> = new Map(); // key: clusterId or "url|database"
+    private tableNames: Map<string, string[]> = new Map(); // key: "url|database"
+    private filterText: string = '';
 
     constructor(private client: SidecarClient) {}
+
+    setFilter(text: string): void {
+        this.filterText = text;
+        this.refresh();
+    }
+
+    getFilter(): string {
+        return this.filterText;
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire(undefined);
@@ -158,6 +191,18 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
         return this.tableCounts.get(key) || 0;
     }
 
+    setTableNames(clusterUrl: string, database: string, tables: string[]): void {
+        const key = `${clusterUrl.toLowerCase()}|${database.toLowerCase()}`;
+        this.tableNames.set(key, tables);
+        this.tableCounts.set(key, tables.length);
+        this.refresh();
+    }
+
+    getTableNames(clusterUrl: string, database: string): string[] | undefined {
+        const key = `${clusterUrl.toLowerCase()}|${database.toLowerCase()}`;
+        return this.tableNames.get(key);
+    }
+
     getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
         return element;
     }
@@ -169,7 +214,17 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
                 this.clusters = await this.client.getClusters();
 
                 // Filter clusters based on current mode
-                const filteredClusters = this.clusters.filter(c => c.type === this.currentMode);
+                let filteredClusters = this.clusters.filter(c => c.type === this.currentMode);
+
+                // Apply text filter if set
+                if (this.filterText) {
+                    const q = this.filterText.toLowerCase();
+                    filteredClusters = filteredClusters.filter(c =>
+                        c.name.toLowerCase().includes(q) ||
+                        c.database.toLowerCase().includes(q) ||
+                        c.url.toLowerCase().includes(q)
+                    );
+                }
 
                 if (filteredClusters.length === 0) {
                     return [];
@@ -229,12 +284,23 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
                 const isActive = this.activeCluster?.id === db.id;
                 const tableCount = this.getTableCount(db.url, db.database);
                 const areaPath = db.type === 'ado' ? defaultAreaPath : undefined;
-                return new DatabaseTreeItem(db, isActive, tableCount, areaPath);
+                const hasTableNames = !!this.getTableNames(db.url, db.database);
+                return new DatabaseTreeItem(db, isActive, tableCount, areaPath, hasTableNames);
             });
         }
 
-        if (element instanceof DatabaseTreeItem && element.areaPath) {
-            return [new AreaPathTreeItem(element.areaPath, element.cluster)];
+        if (element instanceof DatabaseTreeItem) {
+            const children: vscode.TreeItem[] = [];
+            if (element.areaPath) {
+                children.push(new AreaPathTreeItem(element.areaPath, element.cluster));
+            }
+            const tables = this.getTableNames(element.cluster.url, element.cluster.database);
+            if (tables) {
+                for (const table of tables) {
+                    children.push(new TableTreeItem(table, element.cluster));
+                }
+            }
+            return children;
         }
 
         return [];

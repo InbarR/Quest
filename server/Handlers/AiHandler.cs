@@ -141,6 +141,22 @@ public class AiHandler
             _log?.Invoke($"[AI] Vision result received ({result?.Length ?? 0} chars)");
             return ParseExtractionResult(result, request.Mode);
         }
+        catch (Exception ex) when (ex is MyUtils.AI.DeviceCodeAuthRequiredException
+            || ex.InnerException is MyUtils.AI.DeviceCodeAuthRequiredException
+            || ex.Message.Contains("Device code authentication required", StringComparison.OrdinalIgnoreCase)
+            || ex.InnerException?.Message?.Contains("Device code authentication required", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            _log?.Invoke("[AI] Vision extraction needs auth");
+            return new ExtractedDataSourceInfo(
+                Success: false,
+                ClusterUrl: null,
+                Database: null,
+                DisplayName: null,
+                Organization: null,
+                Type: request.Mode,
+                Error: "AUTH_REQUIRED",
+                Confidence: 0);
+        }
         catch (Exception ex)
         {
             _log?.Invoke($"[AI] Vision extraction error: {ex.Message}");
@@ -164,12 +180,13 @@ IMPORTANT: In tree views, the structure is:
 - Top-level item = Cluster (e.g., '1es', 'icmcluster', 'help')
 - Nested items under cluster = Databases (e.g., '1ESPTInsights', 'Samples')
 
-Look for:
+Look for ALL visible clusters and ALL their databases. Return every cluster+database pair you can see.
+
 1. Cluster URL - PREFER the FULL URL if visible (e.g., https://xyz.kusto.windows.net or https://xyz.kusto.azure.com)
    - If only a short name is visible (like '1es'), return it as-is
    - Look in address bars, connection dialogs, tooltips, or status bars for full URLs
    - Common domains: .kusto.windows.net, .kusto.azure.com, .kusto.data.microsoft.com
-2. Database name - items shown UNDER the cluster in tree view (pick the first one if multiple are shown)
+2. Databases - ALL items shown UNDER each cluster in tree view
 3. Display name - use the cluster short name
 
 Common cluster naming patterns:
@@ -177,7 +194,7 @@ Common cluster naming patterns:
 - Full URLs: https://1es.kusto.windows.net, https://help.kusto.azure.com
 
 Respond ONLY in this exact JSON format, nothing else:
-{""clusterUrl"": ""FULL URL if visible, otherwise short name"", ""database"": ""database name or null"", ""displayName"": ""suggested name"", ""confidence"": 0.9}
+{""clusters"": [{""clusterUrl"": ""FULL URL if visible, otherwise short name"", ""databases"": [""db1"", ""db2""], ""displayName"": ""suggested name""}], ""confidence"": 0.9}
 
 If you cannot find a value, set it to null. Set confidence between 0.0-1.0 based on how certain you are." :
 
@@ -210,20 +227,63 @@ If you cannot find a value, set it to null. Set confidence between 0.0-1.0 based
 
             if (mode == "kusto")
             {
-                var clusterUrl = root.TryGetProperty("clusterUrl", out var urlProp) ? urlProp.GetString() : null;
-                var database = root.TryGetProperty("database", out var dbProp) ? dbProp.GetString() : null;
-                var displayName = root.TryGetProperty("displayName", out var nameProp) ? nameProp.GetString() : null;
                 var confidence = root.TryGetProperty("confidence", out var confProp) ? confProp.GetSingle() : 0.5f;
 
+                // Parse multi-cluster array format
+                ExtractedClusterItem[]? clusters = null;
+                string? firstClusterUrl = null;
+                string? firstDatabase = null;
+                string? firstDisplayName = null;
+
+                if (root.TryGetProperty("clusters", out var clustersArr) && clustersArr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var list = new List<ExtractedClusterItem>();
+                    foreach (var item in clustersArr.EnumerateArray())
+                    {
+                        var url = item.TryGetProperty("clusterUrl", out var u) ? u.GetString() : null;
+                        if (string.IsNullOrEmpty(url)) continue;
+
+                        var dbs = new List<string>();
+                        if (item.TryGetProperty("databases", out var dbArr) && dbArr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (var db in dbArr.EnumerateArray())
+                            {
+                                var dbName = db.GetString();
+                                if (!string.IsNullOrEmpty(dbName))
+                                    dbs.Add(dbName);
+                            }
+                        }
+
+                        var name = item.TryGetProperty("displayName", out var n) ? n.GetString() : null;
+                        list.Add(new ExtractedClusterItem(url!, dbs.ToArray(), name));
+                    }
+                    if (list.Count > 0)
+                    {
+                        clusters = list.ToArray();
+                        firstClusterUrl = clusters[0].ClusterUrl;
+                        firstDatabase = clusters[0].Databases.Length > 0 ? clusters[0].Databases[0] : null;
+                        firstDisplayName = clusters[0].DisplayName;
+                    }
+                }
+
+                // Fallback: single-cluster format (backward compat)
+                if (clusters == null || clusters.Length == 0)
+                {
+                    firstClusterUrl = root.TryGetProperty("clusterUrl", out var urlProp) ? urlProp.GetString() : null;
+                    firstDatabase = root.TryGetProperty("database", out var dbProp) ? dbProp.GetString() : null;
+                    firstDisplayName = root.TryGetProperty("displayName", out var nameProp) ? nameProp.GetString() : null;
+                }
+
                 return new ExtractedDataSourceInfo(
-                    Success: !string.IsNullOrEmpty(clusterUrl),
-                    ClusterUrl: clusterUrl,
-                    Database: database,
-                    DisplayName: displayName,
+                    Success: !string.IsNullOrEmpty(firstClusterUrl),
+                    ClusterUrl: firstClusterUrl,
+                    Database: firstDatabase,
+                    DisplayName: firstDisplayName,
                     Organization: null,
                     Type: "kusto",
                     Error: null,
-                    Confidence: confidence);
+                    Confidence: confidence,
+                    Clusters: clusters);
             }
             else // ado
             {

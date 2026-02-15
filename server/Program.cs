@@ -561,24 +561,37 @@ public class SimpleJsonRpcServer
             var connections = new List<KustoExplorerConnection>();
             var doc = System.Xml.Linq.XDocument.Load(settingsPath);
 
-            // Kusto Explorer stores connections in <ConnectionStrings> or <Connections> element
-            // The format is typically: Data Source=https://cluster.kusto.windows.net;Initial Catalog=database
-            var connectionElements = doc.Descendants()
-                .Where(e => e.Name.LocalName == "Connection" ||
-                           e.Name.LocalName == "ConnectionString" ||
-                           e.Name.LocalName == "Item" ||
-                           e.Name.LocalName == "string")
+            // Kusto Explorer exported XML format:
+            // <ServerDescriptionBase><Name>...</Name><ConnectionString>Data Source=...;Initial Catalog=...</ConnectionString></ServerDescriptionBase>
+            var serverEntries = doc.Descendants()
+                .Where(e => e.Name.LocalName == "ServerDescriptionBase")
                 .ToList();
+
+            // If no ServerDescriptionBase found, fall back to scanning for connection strings
+            var connectionElements = serverEntries.Count > 0
+                ? serverEntries
+                : doc.Descendants()
+                    .Where(e => e.Name.LocalName == "Connection" ||
+                               e.Name.LocalName == "ConnectionString" ||
+                               e.Name.LocalName == "Item" ||
+                               e.Name.LocalName == "string")
+                    .ToList();
 
             foreach (var elem in connectionElements)
             {
-                var connStr = elem.Value?.Trim() ?? elem.Attribute("Value")?.Value?.Trim();
+                // Try to get the display name from <Name> child element
+                var nameElement = elem.Elements().FirstOrDefault(e => e.Name.LocalName == "Name")?.Value?.Trim();
+
+                // Get connection string from <ConnectionString> child or the element value itself
+                var connStr = elem.Elements().FirstOrDefault(e => e.Name.LocalName == "ConnectionString")?.Value?.Trim()
+                    ?? elem.Value?.Trim()
+                    ?? elem.Attribute("Value")?.Value?.Trim();
                 if (string.IsNullOrEmpty(connStr)) continue;
 
                 // Parse connection string
                 string? clusterUrl = null;
                 string? database = null;
-                string? name = null;
+                string? name = nameElement;
 
                 // Handle Data Source format
                 var parts = connStr.Split(';', StringSplitOptions.RemoveEmptyEntries);
@@ -600,6 +613,12 @@ public class SimpleJsonRpcServer
                     }
                 }
 
+                // "NetDefaultDB" is Kusto Explorer's placeholder for "no database selected" — treat as null
+                if (string.Equals(database, "NetDefaultDB", StringComparison.OrdinalIgnoreCase))
+                {
+                    database = null;
+                }
+
                 // If no Data Source format, check if it's just a URL
                 if (clusterUrl == null && connStr.Contains("kusto") && connStr.StartsWith("http"))
                 {
@@ -612,25 +631,28 @@ public class SimpleJsonRpcServer
                      clusterUrl.Contains("kusto.azure") ||
                      clusterUrl.Contains("kusto.data")))
                 {
-                    // Extract name from cluster URL
-                    try
+                    // Extract name from cluster URL if not provided
+                    if (string.IsNullOrEmpty(name))
                     {
-                        var uri = new Uri(clusterUrl);
-                        name = uri.Host.Split('.')[0];
-                    }
-                    catch
-                    {
-                        name = clusterUrl;
+                        try
+                        {
+                            var uri = new Uri(clusterUrl);
+                            name = uri.Host.Split('.')[0];
+                        }
+                        catch
+                        {
+                            name = clusterUrl;
+                        }
                     }
 
-                    // Avoid duplicates - match by cluster URL only (database may vary)
+                    // Avoid duplicates
                     if (!connections.Any(c => c.ClusterUrl.Equals(clusterUrl, StringComparison.OrdinalIgnoreCase) &&
                                               c.Database == database))
                     {
                         connections.Add(new KustoExplorerConnection(
                             Name: name ?? "Unknown",
                             ClusterUrl: clusterUrl,
-                            Database: database  // May be null - client will handle
+                            Database: database
                         ));
                     }
                 }

@@ -2,7 +2,7 @@
   "name": "quest",
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "inbar-rotem",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -261,6 +261,18 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.filterDataSources",
+        "title": "Filter Data Sources",
+        "icon": "$(search)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.clearDataSourcesFilter",
+        "title": "Clear Filter",
+        "icon": "$(close)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.refreshClusters",
         "title": "Refresh Data Sources",
         "icon": "$(refresh)",
@@ -384,6 +396,24 @@
         "command": "queryStudio.copyClusterInfo",
         "title": "Copy Connection Info",
         "icon": "$(copy)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.editConnection",
+        "title": "Edit Connection",
+        "icon": "$(edit)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.getDatabases",
+        "title": "Get Databases",
+        "icon": "$(database)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.showTables",
+        "title": "Show Tables",
+        "icon": "$(symbol-field)",
         "category": "Quest"
       },
       {
@@ -656,14 +686,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "queryStudio.refreshClusters",
-          "when": "view == querystudio.clusters",
-          "group": "navigation@4"
+          "command": "queryStudio.filterDataSources",
+          "when": "view == querystudio.clusters && !queryStudio.dataSourcesFiltered",
+          "group": "navigation@3"
         },
         {
-          "command": "queryStudio.fetchSchema",
-          "when": "view == querystudio.clusters",
+          "command": "queryStudio.clearDataSourcesFilter",
+          "when": "view == querystudio.clusters && queryStudio.dataSourcesFiltered",
           "group": "navigation@3"
+        },
+        {
+          "command": "queryStudio.refreshClusters",
+          "when": "view == querystudio.clusters",
+          "group": "navigation@5"
         },
         {
           "command": "queryStudio.addDataSource",
@@ -723,6 +758,36 @@
           "group": "1_actions"
         },
         {
+          "command": "queryStudio.copyClusterInfo",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.copyClusterInfo",
+          "when": "view == querystudio.clusters && viewItem == adoDatabase",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.editConnection",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "2_modify@0"
+        },
+        {
+          "command": "queryStudio.editConnection",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "2_modify@0"
+        },
+        {
+          "command": "queryStudio.editConnection",
+          "when": "view == querystudio.clusters && viewItem == adoDatabase",
+          "group": "2_modify@0"
+        },
+        {
+          "command": "queryStudio.getDatabases",
+          "when": "view == querystudio.clusters && viewItem == cluster",
+          "group": "1_actions"
+        },
+        {
           "command": "queryStudio.renameCluster",
           "when": "view == querystudio.clusters && viewItem == cluster",
           "group": "2_modify@1"
@@ -734,6 +799,11 @@
         },
         {
           "command": "queryStudio.fetchSchema",
+          "when": "view == querystudio.clusters && viewItem == database",
+          "group": "1_actions"
+        },
+        {
+          "command": "queryStudio.showTables",
           "when": "view == querystudio.clusters && viewItem == database",
           "group": "1_actions"
         },

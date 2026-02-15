@@ -722,13 +722,18 @@ public class OutlookService : IDisposable
         }
 
         // Determine final columns based on project or project-reorder
+        // Always ensure EntryId is included (needed for preview/open in Outlook)
         string[] columns;
         if (projectColumns != null && projectColumns.Count > 0)
         {
             // project: only show specified columns (validate they exist)
-            columns = projectColumns
+            var projected = projectColumns
                 .Where(c => defaultColumns.Any(dc => dc.Equals(c, StringComparison.OrdinalIgnoreCase)))
-                .ToArray();
+                .ToList();
+            // Always include EntryId even if user didn't project it
+            if (!projected.Any(c => c.Equals("EntryId", StringComparison.OrdinalIgnoreCase)))
+                projected.Add("EntryId");
+            columns = projected.ToArray();
             if (columns.Length == 0) columns = defaultColumns; // Fallback if no valid columns
         }
         else if (projectReorderColumns != null && projectReorderColumns.Count > 0)

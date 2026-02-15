@@ -187,6 +187,12 @@ export interface ExtractDataSourceFromImageRequest {
     mode: 'kusto' | 'ado';
 }
 
+export interface ExtractedClusterItem {
+    clusterUrl: string;
+    databases: string[];
+    displayName?: string;
+}
+
 export interface ExtractedDataSourceInfo {
     success: boolean;
     clusterUrl?: string;
@@ -196,6 +202,7 @@ export interface ExtractedDataSourceInfo {
     type: 'kusto' | 'ado';
     error?: string;
     confidence: number;
+    clusters?: ExtractedClusterItem[];
 }
 
 export interface KustoExplorerConnection {

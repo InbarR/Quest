@@ -127,8 +127,20 @@ export async function activate(context: vscode.ExtensionContext) {
     resultsProviderInstance = resultsProvider;
 
     // Register all view providers synchronously (fast, no I/O)
+    const clustersTreeView = vscode.window.createTreeView('querystudio.clusters', {
+        treeDataProvider: clusterProvider,
+        canSelectMany: true
+    });
+    const modeLabels: Record<string, string> = { kusto: 'KQL', ado: 'ADO', outlook: 'Outlook' };
+    clusterProvider.onDidChangeTreeData(() => {
+        const filter = clusterProvider.getFilter();
+        const mode = clusterProvider.getMode();
+        clustersTreeView.title = `Data Sources · ${modeLabels[mode] || mode}`;
+        clustersTreeView.description = filter ? `🔍 "${filter}"` : undefined;
+        clustersTreeView.message = filter ? `Filter: "${filter}"  —  Click ✕ to clear` : undefined;
+    });
     context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('querystudio.clusters', clusterProvider),
+        clustersTreeView,
         vscode.window.registerWebviewViewProvider(FavoritesWebViewProvider.viewType, favoritesProvider),
         vscode.window.registerWebviewViewProvider(HistoryWebViewProvider.viewType, historyProvider),
         vscode.window.registerWebviewViewProvider(ResultsHistoryWebViewProvider.viewType, resultsHistoryProvider),
@@ -782,11 +794,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 'queryStudioShortcuts',
                 'Quest Keyboard Shortcuts',
                 vscode.ViewColumn.One,
-                { enableScripts: false }
+                { enableScripts: true }
             );
 
             const shortcutRows = shortcuts.map(s =>
-                `<tr><td><kbd>${s.key}</kbd></td><td>${s.description}</td></tr>`
+                `<tr data-key="${s.key.toLowerCase()}" data-desc="${s.description.toLowerCase()}"><td><kbd>${s.key}</kbd></td><td>${s.description}</td></tr>`
             ).join('\n');
 
             panel.webview.html = `<!DOCTYPE html>
@@ -795,23 +807,39 @@ export async function activate(context: vscode.ExtensionContext) {
     <style>
         body { font-family: var(--vscode-font-family); padding: 20px; color: var(--vscode-foreground); background: var(--vscode-editor-background); }
         h1 { font-size: 1.5em; margin-bottom: 20px; }
+        .search-box { width: 100%; padding: 8px 12px; margin-bottom: 16px; border: 1px solid var(--vscode-input-border); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; font-size: 1em; box-sizing: border-box; outline: none; }
+        .search-box:focus { border-color: var(--vscode-focusBorder); }
+        .search-box::placeholder { color: var(--vscode-input-placeholderForeground); }
         table { width: 100%; border-collapse: collapse; }
         th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--vscode-panel-border); }
         th { background: var(--vscode-sideBar-background); font-weight: 600; }
         kbd { background: var(--vscode-button-secondaryBackground); padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
         tr:hover { background: var(--vscode-list-hoverBackground); }
+        tr.hidden { display: none; }
         .note { margin-top: 20px; padding: 10px; background: var(--vscode-textBlockQuote-background); border-radius: 4px; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h1>⌨️ Quest Keyboard Shortcuts</h1>
+    <h1>Quest Keyboard Shortcuts</h1>
+    <input type="text" class="search-box" id="filter" placeholder="Filter shortcuts..." autofocus />
     <table>
         <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
-        <tbody>${shortcutRows}</tbody>
+        <tbody id="shortcuts">${shortcutRows}</tbody>
     </table>
     <div class="note">
         <strong>Tip:</strong> You can customize these shortcuts in VS Code's Keyboard Shortcuts settings (Ctrl+K Ctrl+S).
     </div>
+    <script>
+        const input = document.getElementById('filter');
+        const rows = document.querySelectorAll('#shortcuts tr');
+        input.addEventListener('input', () => {
+            const q = input.value.toLowerCase();
+            rows.forEach(row => {
+                const match = row.dataset.key.includes(q) || row.dataset.desc.includes(q);
+                row.classList.toggle('hidden', !match);
+            });
+        });
+    </script>
 </body>
 </html>`;
         })
@@ -1203,6 +1231,11 @@ export async function activate(context: vscode.ExtensionContext) {
     sidecarPromise.then(async () => {
         outputChannel.appendLine('Quest fully ready (sidecar connected)');
         updateConnectionStatus(true);
+
+        // Refresh panels that may have loaded before sidecar was ready
+        favoritesProvider.refresh();
+        historyProvider.refresh();
+        clusterProvider.refresh();
 
         // Send GitHub token from VS Code's built-in auth to sidecar (non-interactive)
         try {

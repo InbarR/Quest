@@ -2284,7 +2284,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 const userHlClass = userHighlightedColumns.has(i) ? ' col-highlight' : '';
                 // Apply stored column width if available
                 const widthStyle = columnWidths[i] ? 'width:' + columnWidths[i] + 'px;min-width:' + columnWidths[i] + 'px;max-width:' + columnWidths[i] + 'px;' : '';
-                html += '<th class="' + hlClass + userHlClass + '" style="' + widthStyle + '" draggable="true" data-col="' + i + '" onclick="sortBy(' + i + ')" ondragstart="onColDragStart(event,' + i + ')" ondragover="onColDragOver(event)" ondragleave="onColDragLeave(event)" ondrop="onColDrop(event,' + i + ')">';
+                html += '<th class="' + hlClass + userHlClass + '" style="' + widthStyle + '" draggable="true" data-col="' + i + '" onclick="sortBy(' + i + ')" oncontextmenu="showColumnContextMenu(event,' + i + ')" ondragstart="onColDragStart(event,' + i + ')" ondragover="onColDragOver(event)" ondragleave="onColDragLeave(event)" ondrop="onColDrop(event,' + i + ')">';
                 html += '<span class="col-text">' + escapeHtml(col) + sortInd + '</span>';
                 html += '<div class="resize-handle" onmousedown="startResize(event,' + i + ')"></div>';
                 html += '</th>';
@@ -2945,6 +2945,64 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 });
                 addMenuItem(menu, '📊 Column Stats', () => {
                     const nums = currentData.rows.map(r => parseFloat(r[ci])).filter(n => !isNaN(n));
+                    const sum = nums.reduce((a, b) => a + b, 0);
+                    const avg = sum / nums.length;
+                    const min = Math.min(...nums);
+                    const max = Math.max(...nums);
+                    showStatsDialog(col + ' Statistics',
+                        'Count: ' + nums.length + '\\n' +
+                        'Sum: ' + sum.toLocaleString() + '\\n' +
+                        'Average: ' + avg.toFixed(2) + '\\n' +
+                        'Min: ' + min.toLocaleString() + '\\n' +
+                        'Max: ' + max.toLocaleString());
+                });
+            }
+
+            menu.style.display = 'block';
+            menu.style.left = Math.min(e.pageX, window.innerWidth - 200) + 'px';
+            menu.style.top = Math.min(e.pageY, window.innerHeight - 300) + 'px';
+            setTimeout(() => document.addEventListener('click', () => menu.style.display = 'none', { once: true }), 0);
+        }
+
+        function showColumnContextMenu(e, ci) {
+            e.preventDefault();
+            const col = currentData.columns[ci];
+            const menu = document.getElementById('contextMenu');
+            menu.innerHTML = '';
+
+            addMenuItem(menu, '📋 Copy Column Name', () => {
+                vscode.postMessage({ command: 'copyCell', value: col });
+            });
+            addMenuItem(menu, '📋 Copy All Column Names', () => {
+                vscode.postMessage({ command: 'copyCell', value: currentData.columns.join(', ') });
+            });
+            addMenuItem(menu, '📋 Copy Column Values', () => {
+                const vals = currentData.rows.map(r => String(r[ci] ?? '')).join('\\n');
+                vscode.postMessage({ command: 'copyColumn', value: vals });
+            });
+            addMenuItem(menu, '📋 Copy Distinct Values', () => {
+                const vals = [...new Set(currentData.rows.map(r => String(r[ci] ?? '')))].join(', ');
+                vscode.postMessage({ command: 'copyColumn', value: vals });
+            });
+
+            addMenuSep(menu);
+
+            addMenuItem(menu, '🔍 Filter by Column...', () => {
+                document.getElementById('filterInput').value = col + '::';
+                document.getElementById('filterInput').focus();
+            });
+
+            const isColHighlighted = userHighlightedColumns.has(ci);
+            addMenuItem(menu, isColHighlighted ? '⬜ Remove Highlight' : '🟪 Highlight Column', () => toggleColumnHighlight(ci));
+
+            addMenuItem(menu, '👁️ Hide Column', () => { hiddenColumns.add(ci); renderContent(); });
+
+            addMenuSep(menu);
+
+            // Numeric stats if applicable
+            const nums = currentData.rows.map(r => parseFloat(r[ci])).filter(n => !isNaN(n));
+            if (nums.length > 0) {
+                addMenuItem(menu, '📊 Column Stats', () => {
                     const sum = nums.reduce((a, b) => a + b, 0);
                     const avg = sum / nums.length;
                     const min = Math.min(...nums);

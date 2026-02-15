@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, KustoExplorerConnection } from '../sidecar/SidecarClient';
+import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, ExtractedClusterItem, KustoExplorerConnection } from '../sidecar/SidecarClient';
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
 import { setActiveConnection } from './queryCommands';
 import { updateModeStatusBar, getCurrentMode } from '../extension';
@@ -66,6 +66,29 @@ export function registerClusterCommands(
         })
     );
 
+    // Filter Data Sources
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.filterDataSources', async () => {
+            const current = clusterProvider.getFilter();
+            const value = await vscode.window.showInputBox({
+                prompt: 'Filter data sources by name, database, or URL',
+                placeHolder: 'Type to filter...',
+                value: current
+            });
+            if (value === undefined) return; // cancelled
+            clusterProvider.setFilter(value);
+            vscode.commands.executeCommand('setContext', 'queryStudio.dataSourcesFiltered', !!value);
+        })
+    );
+
+    // Clear Data Sources Filter
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.clearDataSourcesFilter', () => {
+            clusterProvider.setFilter('');
+            vscode.commands.executeCommand('setContext', 'queryStudio.dataSourcesFiltered', false);
+        })
+    );
+
     // Set Active Cluster
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.setActiveCluster', async (cluster: ClusterInfo) => {
@@ -105,53 +128,59 @@ export function registerClusterCommands(
         })
     );
 
-    // Remove Cluster/Database
+    // Remove Cluster/Database (supports multi-select)
     context.subscriptions.push(
-        vscode.commands.registerCommand('queryStudio.removeCluster', async (item) => {
-            // Handle DatabaseTreeItem (single database)
-            if (item?.cluster) {
-                const cluster = item.cluster as ClusterInfo;
-                const confirm = await vscode.window.showWarningMessage(
-                    `Remove "${cluster.name} / ${cluster.database}"?`,
-                    { modal: true },
-                    'Remove'
-                );
+        vscode.commands.registerCommand('queryStudio.removeCluster', async (item, selectedItems?: any[]) => {
+            // Collect all ClusterInfo IDs to remove from the selection
+            const idsToRemove = new Set<string>();
+            const labels: string[] = [];
 
-                if (confirm === 'Remove') {
-                    try {
-                        await client.removeCluster(cluster.id);
-                        clusterProvider.refresh();
-                        vscode.window.showInformationMessage(`Removed "${cluster.name} / ${cluster.database}"`);
-                    } catch (error) {
-                        const message = error instanceof Error ? error.message : 'Unknown error';
-                        vscode.window.showErrorMessage(`Failed to remove: ${message}`);
+            const collectFromItem = (it: any) => {
+                if (it?.cluster) {
+                    const cluster = it.cluster as ClusterInfo;
+                    idsToRemove.add(cluster.id);
+                    labels.push(`${cluster.name} / ${cluster.database}`);
+                } else if (it?.databases && Array.isArray(it.databases)) {
+                    const databases = it.databases as ClusterInfo[];
+                    const clusterName = it.clusterName || databases[0]?.name || 'cluster';
+                    for (const db of databases) {
+                        idsToRemove.add(db.id);
                     }
+                    labels.push(`${clusterName} (${databases.length} db)`);
                 }
-                return;
+            };
+
+            // If multi-select provided, use all selected items; otherwise just the single item
+            const items = selectedItems && selectedItems.length > 1 ? selectedItems : [item];
+            for (const it of items) {
+                collectFromItem(it);
             }
 
-            // Handle ClusterTreeItem (cluster with multiple databases)
-            if (item?.databases && Array.isArray(item.databases)) {
-                const databases = item.databases as ClusterInfo[];
-                const clusterName = item.clusterName || databases[0]?.name || 'cluster';
+            if (idsToRemove.size === 0) return;
 
-                const confirm = await vscode.window.showWarningMessage(
-                    `Remove "${clusterName}" and all ${databases.length} database(s)?`,
-                    { modal: true },
-                    'Remove All'
-                );
+            const message = labels.length === 1
+                ? `Remove "${labels[0]}"?`
+                : `Remove ${labels.length} data sources?\n${labels.join(', ')}`;
 
-                if (confirm === 'Remove All') {
-                    try {
-                        for (const db of databases) {
-                            await client.removeCluster(db.id);
-                        }
-                        clusterProvider.refresh();
-                        vscode.window.showInformationMessage(`Removed "${clusterName}" (${databases.length} databases)`);
-                    } catch (error) {
-                        const message = error instanceof Error ? error.message : 'Unknown error';
-                        vscode.window.showErrorMessage(`Failed to remove: ${message}`);
+            const confirm = await vscode.window.showWarningMessage(
+                message,
+                { modal: true },
+                'Remove'
+            );
+
+            if (confirm === 'Remove') {
+                try {
+                    for (const id of idsToRemove) {
+                        await client.removeCluster(id);
                     }
+                    clusterProvider.refresh();
+                    const count = idsToRemove.size;
+                    vscode.window.showInformationMessage(
+                        count === 1 ? `Removed "${labels[0]}"` : `Removed ${count} data sources`
+                    );
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    vscode.window.showErrorMessage(`Failed to remove: ${message}`);
                 }
             }
         })
@@ -244,16 +273,262 @@ export function registerClusterCommands(
     // Copy Cluster Info
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.copyClusterInfo', async (item) => {
-            if (!item?.cluster) {
+            // DatabaseTreeItem: has .cluster
+            if (item?.cluster) {
+                const cluster = item.cluster as ClusterInfo;
+                const info = cluster.type === 'kusto'
+                    ? `Cluster: ${cluster.url}\nDatabase: ${cluster.database}\nName: ${cluster.name}`
+                    : `Organization: ${cluster.url}\nProject: ${cluster.database}\nName: ${cluster.name}`;
+                await vscode.env.clipboard.writeText(info);
+                vscode.window.showInformationMessage('Connection info copied to clipboard');
                 return;
             }
 
-            const cluster = item.cluster as ClusterInfo;
-            const info = cluster.type === 'kusto'
-                ? `Cluster: ${cluster.url}\nDatabase: ${cluster.database}\nName: ${cluster.name}`
-                : `Organization: ${cluster.url}\nProject: ${cluster.database}\nName: ${cluster.name}`;
+            // ClusterTreeItem: has .databases array and .clusterUrl
+            if (item?.databases && Array.isArray(item.databases)) {
+                const databases = item.databases as ClusterInfo[];
+                const clusterName = item.clusterName || databases[0]?.name || 'cluster';
+                const clusterUrl = item.clusterUrl || databases[0]?.url || '';
+                const type = item.clusterType || databases[0]?.type || 'kusto';
+                const dbNames = databases.map((d: ClusterInfo) => d.database).join(', ');
 
-            await vscode.env.clipboard.writeText(info);
+                const info = type === 'kusto'
+                    ? `Cluster: ${clusterUrl}\nName: ${clusterName}\nDatabases: ${dbNames}`
+                    : `Organization: ${clusterUrl}\nName: ${clusterName}\nProjects: ${dbNames}`;
+                await vscode.env.clipboard.writeText(info);
+                vscode.window.showInformationMessage('Connection info copied to clipboard');
+            }
+        })
+    );
+
+    // Edit Connection (right-click on database or cluster item)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.editConnection', async (item) => {
+            // DatabaseTreeItem: edit a single database entry
+            if (item?.cluster) {
+                const cluster = item.cluster as ClusterInfo;
+                await editSingleConnection(client, clusterProvider, cluster);
+                return;
+            }
+
+            // ClusterTreeItem: edit the cluster URL/name (applies to all databases under it)
+            if (item?.databases && Array.isArray(item.databases)) {
+                const databases = item.databases as ClusterInfo[];
+                const currentUrl = item.clusterUrl || databases[0]?.url || '';
+                const currentName = item.clusterName || databases[0]?.name || '';
+                const isKusto = (item.clusterType || databases[0]?.type) === 'kusto';
+
+                const url = await vscode.window.showInputBox({
+                    prompt: isKusto ? 'Cluster URL' : 'Organization URL',
+                    value: currentUrl,
+                    ignoreFocusOut: true,
+                    validateInput: (v) => v ? undefined : 'URL is required'
+                });
+                if (!url) return;
+
+                const name = await vscode.window.showInputBox({
+                    prompt: 'Display name',
+                    value: currentName,
+                    ignoreFocusOut: true,
+                    validateInput: (v) => v?.trim() ? undefined : 'Name is required'
+                });
+                if (!name) return;
+
+                const finalUrl = isKusto ? normalizeKustoUrl(url) : url;
+                if (finalUrl === currentUrl && name === currentName) return;
+
+                try {
+                    for (const db of databases) {
+                        await client.removeCluster(db.id);
+                        const updated: ClusterInfo = {
+                            id: Date.now().toString() + '_' + db.database,
+                            name: name.trim(),
+                            url: finalUrl,
+                            database: db.database,
+                            type: db.type,
+                            isFavorite: db.isFavorite,
+                            organization: db.organization
+                        };
+                        await client.addCluster(updated);
+                    }
+                    clusterProvider.refresh();
+                    vscode.window.showInformationMessage(`Updated "${name}"`);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    vscode.window.showErrorMessage(`Failed to update connection: ${message}`);
+                }
+            }
+        })
+    );
+
+    // Get Databases (right-click on cluster → discover databases)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.getDatabases', async (item) => {
+            if (!item?.databases || !Array.isArray(item.databases)) return;
+            const databases = item.databases as ClusterInfo[];
+            const clusterUrl = item.clusterUrl || databases[0]?.url;
+            const clusterName = item.clusterName || databases[0]?.name || 'cluster';
+
+            if (!clusterUrl) return;
+
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Fetching databases from ${clusterName}...`,
+                cancellable: false
+            }, async () => {
+                try {
+                    // Use .show databases to list all databases on the cluster
+                    const result = await client.executeQuery({
+                        query: '.show databases | project DatabaseName',
+                        clusterUrl: clusterUrl,
+                        database: databases[0]?.database || '',
+                        type: 'kusto'
+                    });
+
+                    if (!result.success) {
+                        vscode.window.showErrorMessage(`Failed to get databases: ${result.error}`);
+                        return;
+                    }
+
+                    if (result.rowCount === 0) {
+                        vscode.window.showInformationMessage('No databases found on this cluster.');
+                        return;
+                    }
+
+                    // Get existing database names for this cluster
+                    const existingDbs = new Set(databases.map(d => d.database.toLowerCase()));
+
+                    // Build QuickPick items, marking already-added ones
+                    const dbNames: string[] = result.rows.map(row => row[0]);
+                    const items = dbNames.map(dbName => ({
+                        label: dbName,
+                        description: existingDbs.has(dbName.toLowerCase()) ? 'already added' : '',
+                        picked: !existingDbs.has(dbName.toLowerCase()),
+                        dbName
+                    }));
+
+                    const selected = await vscode.window.showQuickPick(items, {
+                        canPickMany: true,
+                        placeHolder: `Select databases to add from ${clusterName} (${dbNames.length} found)`
+                    });
+
+                    if (!selected || selected.length === 0) return;
+
+                    let added = 0;
+                    for (const pick of selected) {
+                        if (existingDbs.has(pick.dbName.toLowerCase())) continue;
+                        try {
+                            const cluster: ClusterInfo = {
+                                id: Date.now().toString() + '_' + added,
+                                name: clusterName,
+                                url: clusterUrl,
+                                database: pick.dbName,
+                                type: 'kusto',
+                                isFavorite: false
+                            };
+                            await client.addCluster(cluster);
+                            added++;
+                        } catch (err) {
+                            console.error(`Failed to add ${pick.dbName}:`, err);
+                        }
+                    }
+
+                    if (added > 0) {
+                        clusterProvider.refresh();
+                        vscode.window.showInformationMessage(`Added ${added} database(s) to ${clusterName}`);
+                    }
+                } catch (error) {
+                    const msg = error instanceof Error ? error.message : 'Unknown error';
+                    vscode.window.showErrorMessage(`Failed to get databases: ${msg}`);
+                }
+            });
+        })
+    );
+
+    // Show Tables (right-click on database → show table names in tree)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.showTables', async (item) => {
+            if (!item?.cluster) return;
+            const cluster = item.cluster as ClusterInfo;
+            if (cluster.type !== 'kusto') {
+                vscode.window.showInformationMessage('Show Tables is only available for Kusto databases.');
+                return;
+            }
+
+            let tableNames: string[] | undefined;
+
+            // Try schema cache first
+            try {
+                const schema = await client.getSchema(cluster.url, cluster.database);
+                if (schema?.tables?.length > 0) {
+                    tableNames = schema.tables.map(t => t.name).sort();
+                }
+            } catch {
+                // Cache miss — will query the cluster
+            }
+
+            // Fall back to querying the cluster
+            if (!tableNames) {
+                tableNames = await vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Fetching tables from ${cluster.database}...`,
+                    cancellable: false
+                }, async (): Promise<string[] | undefined> => {
+                    try {
+                        const result = await client.executeQuery({
+                            query: '.show tables | project TableName | order by TableName asc',
+                            clusterUrl: cluster.url,
+                            database: cluster.database,
+                            type: 'kusto'
+                        });
+                        if (!result.success) {
+                            vscode.window.showErrorMessage(`Failed to get tables: ${result.error}`);
+                            return undefined;
+                        }
+                        return result.rows.map(row => row[0]);
+                    } catch (error) {
+                        const msg = error instanceof Error ? error.message : 'Unknown error';
+                        vscode.window.showErrorMessage(`Failed to get tables: ${msg}`);
+                        return undefined;
+                    }
+                });
+            }
+
+            if (!tableNames || tableNames.length === 0) {
+                vscode.window.showInformationMessage('No tables found.');
+                return;
+            }
+
+            // Let user pick which tables to show in the tree
+            const items = tableNames.map(name => ({
+                label: name,
+                picked: true
+            }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                canPickMany: true,
+                placeHolder: `Select tables to show (${tableNames.length} found in ${cluster.database})`
+            });
+
+            if (!selected || selected.length === 0) return;
+
+            clusterProvider.setTableNames(cluster.url, cluster.database, selected.map(s => s.label));
+        })
+    );
+
+    // Insert Table Name (click on table in tree → insert into editor)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.insertTableName', async (tableName: string) => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+
+            await editor.edit(editBuilder => {
+                if (editor.selection.isEmpty) {
+                    editBuilder.insert(editor.selection.active, tableName);
+                } else {
+                    editBuilder.replace(editor.selection, tableName);
+                }
+            });
         })
     );
 
@@ -763,13 +1038,14 @@ function normalizeKustoUrl(input: string): string {
         return `https://${url}`;
     }
 
-    // If it looks like a hostname with dots but no protocol, add https://
-    if (url.includes('.') && !url.includes(' ')) {
+    // If it ends with a recognized TLD, treat as a full hostname
+    const knownTlds = ['.net', '.com', '.org', '.io', '.cloud', '.azure'];
+    if (url.includes('.') && !url.includes(' ') && knownTlds.some(tld => url.toLowerCase().endsWith(tld))) {
         return `https://${url}`;
     }
 
-    // Otherwise, assume it's just a cluster name and add the full domain
-    // Default to kusto.windows.net (most common)
+    // Otherwise, assume it's a cluster name (possibly with region like "m365dprd.westeurope")
+    // and add the full domain. Default to kusto.windows.net (most common)
     return `https://${url}.kusto.windows.net`;
 }
 
@@ -842,12 +1118,35 @@ async function addDataSourceFromImage(
             });
 
             if (!extracted.success) {
+                // Handle auth required - prompt VS Code GitHub sign-in and retry
+                if (extracted.error === 'AUTH_REQUIRED') {
+                    try {
+                        const session = await vscode.authentication.getSession('github', ['read:user'], { createIfNone: true });
+                        if (session) {
+                            await client.setAiToken(session.accessToken);
+                            const retry = await client.extractDataSourceFromImage({
+                                imageBase64: imageBase64!,
+                                imageMimeType: mimeType!,
+                                mode: mode === 'kusto' ? 'kusto' : 'ado'
+                            });
+                            if (retry.success) {
+                                await handleExtractedResult(client, clusterProvider, retry, mode);
+                                return;
+                            }
+                            vscode.window.showErrorMessage(`Could not extract info: ${retry.error || 'Unknown error'}`);
+                            return;
+                        }
+                    } catch {
+                        // Sign-in cancelled or failed
+                    }
+                    vscode.window.showErrorMessage('GitHub sign-in is required for AI features. Please sign in and try again.');
+                    return;
+                }
                 vscode.window.showErrorMessage(`Could not extract info: ${extracted.error || 'Unknown error'}`);
                 return;
             }
 
-            // Show extracted info for confirmation
-            await confirmAndAddDataSource(client, clusterProvider, extracted, mode);
+            await handleExtractedResult(client, clusterProvider, extracted, mode);
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             vscode.window.showErrorMessage(`Extraction failed: ${msg}`);
@@ -873,6 +1172,148 @@ async function selectImageFile(): Promise<{ base64: string; mimeType: string } |
                      ext === 'webp' ? 'image/webp' : 'image/png';
 
     return { base64, mimeType };
+}
+
+async function handleExtractedResult(
+    client: SidecarClient,
+    clusterProvider: ClusterTreeProvider,
+    extracted: ExtractedDataSourceInfo,
+    mode: string
+) {
+    // Use multi-cluster flow for kusto when clusters array is available
+    if (mode === 'kusto' && extracted.clusters && extracted.clusters.length > 0) {
+        await addMultipleClusters(client, clusterProvider, extracted.clusters);
+        return;
+    }
+
+    // Fallback to single-item confirm flow (ADO or when no clusters array)
+    await confirmAndAddDataSource(client, clusterProvider, extracted, mode);
+}
+
+async function addMultipleClusters(
+    client: SidecarClient,
+    clusterProvider: ClusterTreeProvider,
+    clusters: ExtractedClusterItem[]
+) {
+    // Build a flat list of cluster/database pairs for QuickPick
+    interface ClusterDbItem extends vscode.QuickPickItem {
+        clusterUrl: string;
+        database?: string;
+        clusterDisplayName?: string;
+    }
+
+    const items: ClusterDbItem[] = [];
+    for (const cluster of clusters) {
+        if (cluster.databases.length === 0) {
+            // Cluster with no databases
+            items.push({
+                label: cluster.displayName || cluster.clusterUrl,
+                description: cluster.clusterUrl,
+                picked: true,
+                clusterUrl: cluster.clusterUrl,
+                clusterDisplayName: cluster.displayName
+            });
+        } else {
+            for (const db of cluster.databases) {
+                items.push({
+                    label: `${cluster.displayName || cluster.clusterUrl} / ${db}`,
+                    description: cluster.clusterUrl,
+                    picked: true,
+                    clusterUrl: cluster.clusterUrl,
+                    database: db,
+                    clusterDisplayName: cluster.displayName
+                });
+            }
+        }
+    }
+
+    const selected = await vscode.window.showQuickPick(items, {
+        canPickMany: true,
+        placeHolder: `Select data sources to add (${items.length} found in screenshot)`
+    });
+
+    if (!selected || selected.length === 0) {
+        return;
+    }
+
+    let added = 0;
+    for (const item of selected) {
+        try {
+            const clusterInfo: ClusterInfo = {
+                id: Date.now().toString() + '_' + added,
+                name: item.clusterDisplayName || extractClusterName(item.clusterUrl),
+                url: normalizeKustoUrl(item.clusterUrl),
+                database: item.database || '',
+                type: 'kusto',
+                isFavorite: false
+            };
+            await client.addCluster(clusterInfo);
+            added++;
+        } catch (err) {
+            console.error(`Failed to add ${item.label}:`, err);
+        }
+    }
+
+    if (added > 0) {
+        clusterProvider.refresh();
+        vscode.window.showInformationMessage(`Added ${added} data source(s) from screenshot`);
+    }
+}
+
+async function editSingleConnection(
+    client: SidecarClient,
+    clusterProvider: ClusterTreeProvider,
+    cluster: ClusterInfo
+) {
+    const isKusto = cluster.type === 'kusto';
+
+    const url = await vscode.window.showInputBox({
+        prompt: isKusto ? 'Cluster URL' : 'Organization URL',
+        value: cluster.url,
+        ignoreFocusOut: true,
+        validateInput: (v) => v ? undefined : 'URL is required'
+    });
+    if (!url) return;
+
+    const database = await vscode.window.showInputBox({
+        prompt: isKusto ? 'Database name' : 'Project name',
+        value: cluster.database,
+        ignoreFocusOut: true
+    });
+    if (database === undefined) return;
+
+    const name = await vscode.window.showInputBox({
+        prompt: 'Display name',
+        value: cluster.name,
+        ignoreFocusOut: true,
+        validateInput: (v) => v?.trim() ? undefined : 'Name is required'
+    });
+    if (!name) return;
+
+    const finalUrl = isKusto ? normalizeKustoUrl(url) : url;
+
+    if (finalUrl === cluster.url && database === cluster.database && name === cluster.name) {
+        return;
+    }
+
+    try {
+        await client.removeCluster(cluster.id);
+        const updated: ClusterInfo = {
+            id: Date.now().toString(),
+            name: name.trim(),
+            url: finalUrl,
+            database: database || '',
+            type: cluster.type,
+            isFavorite: cluster.isFavorite,
+            organization: cluster.organization
+        };
+        await client.addCluster(updated);
+        clusterProvider.refresh();
+        vscode.window.showInformationMessage(`Updated "${name}"`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        vscode.window.showErrorMessage(`Failed to update connection: ${message}`);
+    }
 }
 
 async function confirmAndAddDataSource(

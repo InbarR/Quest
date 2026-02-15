@@ -460,18 +460,16 @@ export function registerQueryCommands(
                 return;
             }
 
-            // Determine query type from current mode (from extension.ts) or language
+            // Determine query type: current mode takes priority over file language
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
             outputChannel.appendLine(`DEBUG: currentMode=${currentMode}, activeQueryType=${activeQueryType}, langId=${langId}`);
-            let queryType: 'kusto' | 'ado' | 'outlook';
-            if (currentMode === 'outlook' || langId === 'oql') {
-                queryType = 'outlook';
-            } else if (currentMode === 'ado' || langId === 'wiql') {
-                queryType = 'ado';
-            } else {
-                queryType = 'kusto';
-            }
+            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+                : currentMode === 'ado' ? 'ado'
+                : currentMode === 'kusto' ? 'kusto'
+                : langId === 'oql' ? 'outlook'
+                : langId === 'wiql' ? 'ado'
+                : 'kusto';
             outputChannel.appendLine(`Language: ${langId}, Current mode: ${currentMode}, Using: ${queryType}`);
 
             // Check for active connection (not needed for Outlook)
@@ -666,14 +664,12 @@ export function registerQueryCommands(
 
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
-            let queryType: 'kusto' | 'ado' | 'outlook';
-            if (currentMode === 'outlook' || langId === 'oql') {
-                queryType = 'outlook';
-            } else if (currentMode === 'ado' || langId === 'wiql') {
-                queryType = 'ado';
-            } else {
-                queryType = 'kusto';
-            }
+            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+                : currentMode === 'ado' ? 'ado'
+                : currentMode === 'kusto' ? 'kusto'
+                : langId === 'oql' ? 'outlook'
+                : langId === 'wiql' ? 'ado'
+                : 'kusto';
 
             if (queryType !== 'outlook') {
                 if (!activeClusterUrl || !activeDatabase) {
@@ -929,7 +925,13 @@ export function registerQueryCommands(
             }
 
             const langId = editor.document.languageId;
-            const queryType: 'kusto' | 'ado' | 'outlook' = langId === 'wiql' ? 'ado' : langId === 'oql' ? 'outlook' : 'kusto';
+            const currentMode = getCurrentMode();
+            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+                : currentMode === 'ado' ? 'ado'
+                : currentMode === 'kusto' ? 'kusto'
+                : langId === 'oql' ? 'outlook'
+                : langId === 'wiql' ? 'ado'
+                : 'kusto';
 
             const name = await vscode.window.showInputBox({
                 prompt: 'Enter a name for this query',
