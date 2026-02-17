@@ -79,7 +79,20 @@ public record AiContext(
     string[]? RecentQueries = null,
     string? PersonaInstructions = null,
     string? SystemPromptOverride = null,
-    AdoContextInfo? AdoContext = null
+    AdoContextInfo? AdoContext = null,
+    McpToolContext[]? McpTools = null
+);
+public record McpToolContext(
+    string ServerName,
+    string ToolName,
+    string? Description = null,
+    McpToolParamContext[]? Parameters = null
+);
+public record McpToolParamContext(
+    string Name,
+    string Type,
+    string? Description = null,
+    bool Required = false
 );
 public record GetSystemPromptRequest(string? Mode = null);
 public record GetSystemPromptResponse(string SystemPrompt);
@@ -150,4 +163,28 @@ public record ImportKustoExplorerResponse(
     bool Success,
     KustoExplorerConnection[] Connections,
     string? Error
+);
+
+// MCP
+public record McpToolSchema(
+    string ServerName,
+    string ToolName,
+    string Description,
+    McpToolParameter[] Parameters
+);
+
+public record McpToolParameter(
+    string Name,
+    string Type,
+    string Description,
+    bool Required
+);
+
+public record McpSetSchemaRequest(McpToolSchema[] Tools);
+
+public record McpExecuteToolRequest(
+    string ServerName,
+    string ToolName,
+    string RawJsonResult,
+    string OriginalQuery
 );

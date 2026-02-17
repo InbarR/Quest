@@ -4,6 +4,7 @@ namespace MyTools.Core
     {
         Kusto,
         ADO,
-        Outlook
+        Outlook,
+        MCP
     }
 }

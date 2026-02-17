@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SidecarClient } from '../sidecar/SidecarClient';
 import { getActiveConnection } from '../commands/queryCommands';
+import { McpToolDiscovery } from '../mcp/McpToolDiscovery';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
@@ -28,7 +29,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     private _messages: ChatMessage[] = [];
     private _isProcessing = false;
     private _sessionId?: string;
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private _suggestions: ZeroPromptSuggestion[] = [];
     private _disposables: vscode.Disposable[] = [];
 
@@ -38,10 +39,13 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     private _activeClusterUrl?: string;
     private _activeDatabase?: string;
     private _activeClusterName?: string;
-    private _activeClusterType?: 'kusto' | 'ado' | 'outlook';
+    private _activeClusterType?: 'kusto' | 'ado' | 'outlook' | 'mcp';
     private _inputHistory: string[] = [];
     private _currentPersona: string = '';
     private _customSystemPrompt: string | undefined;
+    private _mcpToolDiscovery?: McpToolDiscovery;
+    private _selectedMcpServer?: string;
+    private _selectedMcpTool?: string;
     private static readonly INPUT_HISTORY_KEY = 'aiChat.inputHistory';
     private static readonly INPUT_HISTORY_MAX = 100;
 
@@ -56,6 +60,200 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         // Load default persona from settings
         const config = vscode.workspace.getConfiguration('queryStudio.ai');
         this._currentPersona = config.get<string>('defaultPersona') || '';
+    }
+
+    public setMcpToolDiscovery(discovery: McpToolDiscovery) {
+        this._mcpToolDiscovery = discovery;
+    }
+
+    /**
+     * Interactive MCP server/tool selection flow.
+     * Shows VS Code QuickPick to guide the user through choosing a server and tool
+     * before sending to the AI. Returns the filtered tools or undefined if cancelled.
+     */
+    private async _selectMcpScope(allTools: { serverName: string; toolName: string; description?: string; parameters?: { name: string; type: string; description?: string; required: boolean }[] }[]): Promise<typeof allTools | undefined> {
+        // Group tools by server
+        const serverMap = new Map<string, typeof allTools>();
+        for (const tool of allTools) {
+            const list = serverMap.get(tool.serverName) || [];
+            list.push(tool);
+            serverMap.set(tool.serverName, list);
+        }
+        const serverNames = [...serverMap.keys()].sort();
+
+        // Step 1: Server selection
+        const serverItems: vscode.QuickPickItem[] = [
+            { label: '$(globe) All Servers', description: `${allTools.length} tools across ${serverNames.length} servers`, detail: 'Send all tools to the AI (may be slow for large tool sets)' },
+            { label: '', kind: vscode.QuickPickItemKind.Separator },
+            ...serverNames.map(name => {
+                const tools = serverMap.get(name)!;
+                return {
+                    label: `$(server) ${name}`,
+                    description: `${tools.length} tools`,
+                    detail: tools.slice(0, 3).map(t => t.toolName).join(', ') + (tools.length > 3 ? ` +${tools.length - 3} more` : '')
+                };
+            })
+        ];
+
+        const selectedServer = await vscode.window.showQuickPick(serverItems, {
+            title: 'MCP Server Selection',
+            placeHolder: 'Which MCP server would you like to query?',
+            matchOnDescription: true,
+            matchOnDetail: true
+        });
+        if (!selectedServer) return undefined; // cancelled
+
+        if (selectedServer.label === '$(globe) All Servers') {
+            this._selectedMcpServer = undefined;
+            this._selectedMcpTool = undefined;
+            this._updateMcpContextChips();
+            return allTools;
+        }
+
+        // Extract server name (remove codicon prefix)
+        const serverName = selectedServer.label.replace('$(server) ', '');
+        this._selectedMcpServer = serverName;
+        const serverTools = serverMap.get(serverName) || [];
+
+        // Step 2: Tool selection
+        const toolItems: vscode.QuickPickItem[] = [
+            { label: '$(layers) All Tools', description: `${serverTools.length} tools from ${serverName}`, detail: 'Send all tools from this server to the AI' },
+            { label: '', kind: vscode.QuickPickItemKind.Separator },
+            ...serverTools.map(tool => ({
+                label: `$(tools) ${tool.toolName}`,
+                description: tool.description ? (tool.description.length > 80 ? tool.description.substring(0, 80) + '...' : tool.description) : '',
+                detail: tool.parameters?.map(p => `${p.name}${p.required ? '*' : ''}: ${p.type}`).join(', ') || 'No parameters'
+            }))
+        ];
+
+        const selectedTool = await vscode.window.showQuickPick(toolItems, {
+            title: `Tools from ${serverName}`,
+            placeHolder: `Which tool do you want help with? (${serverTools.length} available)`,
+            matchOnDescription: true,
+            matchOnDetail: true
+        });
+        if (!selectedTool) return undefined; // cancelled
+
+        if (selectedTool.label === '$(layers) All Tools') {
+            this._selectedMcpTool = undefined;
+            this._updateMcpContextChips();
+            return serverTools;
+        }
+
+        // Single tool selected
+        const toolName = selectedTool.label.replace('$(tools) ', '');
+        this._selectedMcpTool = toolName;
+        this._updateMcpContextChips();
+        return serverTools.filter(t => t.toolName === toolName);
+    }
+
+    /**
+     * Prompts the user to change the selected MCP server via QuickPick
+     */
+    private async _changeMcpServer() {
+        if (!this._mcpToolDiscovery) return;
+        await this._mcpToolDiscovery.discoverTools();
+        const tools = this._mcpToolDiscovery.tools;
+        if (tools.length === 0) {
+            vscode.window.showWarningMessage('No MCP tools discovered. Check that MCP servers are running.');
+            return;
+        }
+
+        const allMcpTools = tools.map(t => ({
+            serverName: t.serverName,
+            toolName: t.toolName,
+            description: t.description || undefined,
+            parameters: t.parameters.map(p => ({ name: p.name, type: p.type, description: p.description || undefined, required: p.required }))
+        }));
+
+        // Just run the server portion of selection
+        const serverMap = new Map<string, typeof allMcpTools>();
+        for (const tool of allMcpTools) {
+            const list = serverMap.get(tool.serverName) || [];
+            list.push(tool);
+            serverMap.set(tool.serverName, list);
+        }
+        const serverNames = [...serverMap.keys()].sort();
+
+        const serverItems: vscode.QuickPickItem[] = [
+            { label: '$(globe) All Servers', description: `${allMcpTools.length} tools across ${serverNames.length} servers` },
+            { label: '', kind: vscode.QuickPickItemKind.Separator },
+            ...serverNames.map(name => ({
+                label: `$(server) ${name}`,
+                description: `${(serverMap.get(name) || []).length} tools`,
+            }))
+        ];
+
+        const selected = await vscode.window.showQuickPick(serverItems, {
+            title: 'Change MCP Server',
+            placeHolder: 'Select an MCP server',
+            matchOnDescription: true
+        });
+        if (!selected) return;
+
+        if (selected.label === '$(globe) All Servers') {
+            this._selectedMcpServer = undefined;
+            this._selectedMcpTool = undefined;
+        } else {
+            this._selectedMcpServer = selected.label.replace('$(server) ', '');
+            this._selectedMcpTool = undefined;
+        }
+        this._updateMcpContextChips();
+        this.outputChannel.appendLine(`[AI Chat] MCP server changed to: ${this._selectedMcpServer || 'All Servers'}`);
+    }
+
+    /**
+     * Prompts the user to change the selected MCP tool via QuickPick
+     */
+    private async _changeMcpTool() {
+        if (!this._mcpToolDiscovery) return;
+        const tools = this._mcpToolDiscovery.tools;
+        const serverName = this._selectedMcpServer;
+
+        const serverTools = serverName
+            ? tools.filter(t => t.serverName === serverName)
+            : tools;
+
+        if (serverTools.length === 0) {
+            vscode.window.showWarningMessage(serverName ? `No tools found for server "${serverName}".` : 'No MCP tools discovered.');
+            return;
+        }
+
+        const toolItems: vscode.QuickPickItem[] = [
+            { label: '$(layers) All Tools', description: `${serverTools.length} tools${serverName ? ` from ${serverName}` : ''}` },
+            { label: '', kind: vscode.QuickPickItemKind.Separator },
+            ...serverTools.map(t => ({
+                label: `$(tools) ${t.toolName}`,
+                description: t.description ? (t.description.length > 80 ? t.description.substring(0, 80) + '...' : t.description) : '',
+            }))
+        ];
+
+        const selected = await vscode.window.showQuickPick(toolItems, {
+            title: serverName ? `Tools from ${serverName}` : 'All MCP Tools',
+            placeHolder: 'Select a tool to focus on',
+            matchOnDescription: true
+        });
+        if (!selected) return;
+
+        if (selected.label === '$(layers) All Tools') {
+            this._selectedMcpTool = undefined;
+        } else {
+            this._selectedMcpTool = selected.label.replace('$(tools) ', '');
+        }
+        this._updateMcpContextChips();
+        this.outputChannel.appendLine(`[AI Chat] MCP tool changed to: ${this._selectedMcpTool || 'All Tools'}`);
+    }
+
+    /**
+     * Sends current MCP server/tool selection state to the webview context bar
+     */
+    private _updateMcpContextChips() {
+        this._view?.webview.postMessage({
+            command: 'updateMcpContext',
+            server: this._selectedMcpServer || null,
+            tool: this._selectedMcpTool || null,
+            isMcpMode: this._currentMode === 'mcp'
+        });
     }
 
     private async saveInputHistory(input: string) {
@@ -129,7 +327,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         this._onSelectCluster = callback;
     }
 
-    public setActiveCluster(clusterUrl: string, database: string, name: string, type: 'kusto' | 'ado' | 'outlook') {
+    public setActiveCluster(clusterUrl: string, database: string, name: string, type: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._activeClusterUrl = clusterUrl;
         this._activeDatabase = database;
         this._activeClusterName = name;
@@ -150,10 +348,16 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public async setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public async setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
+        // Clear MCP selection when switching away from MCP mode
+        if (mode !== 'mcp') {
+            this._selectedMcpServer = undefined;
+            this._selectedMcpTool = undefined;
+        }
         await this._loadSuggestions();
         this._updateView();
+        this._updateMcpContextChips();
     }
 
     /**
@@ -262,6 +466,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 { text: 'Query work items modified this week', source: 'common', icon: '' },
                 { text: 'List tasks in current sprint', source: 'common', icon: '' }
             ];
+        } else if (this._currentMode === 'mcp') {
+            return [
+                { text: 'List available tools from my MCP servers', source: 'common', icon: '' },
+                { text: 'Query data from my MCP data source', source: 'common', icon: '' },
+                { text: 'Show me how to filter MCP tool results', source: 'common', icon: '' }
+            ];
         } else {
             return [
                 { text: 'Find emails from last week with attachments', source: 'common', icon: '' },
@@ -276,6 +486,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             case 'kusto': return 'KQL (Kusto Query Language)';
             case 'ado': return 'WIQL (Azure DevOps Work Items)';
             case 'outlook': return 'OQL (Outlook Queries)';
+            case 'mcp': return 'MCPQL (MCP Queries)';
         }
     }
 
@@ -284,6 +495,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             case 'kusto': return 'K';
             case 'ado': return 'A';
             case 'outlook': return 'O';
+            case 'mcp': return 'M';
         }
     }
 
@@ -374,6 +586,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     command: 'systemPromptSaved',
                     isCustom: !!this._customSystemPrompt
                 });
+                break;
+            case 'changeMcpServer':
+                await this._changeMcpServer();
+                break;
+            case 'changeMcpTool':
+                await this._changeMcpTool();
                 break;
         }
     }
@@ -480,20 +698,25 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         if (this._isProcessing || !text.trim()) return;
 
         // Detect if user's message suggests a different mode
-        const detectedMode = this._detectIntendedMode(text);
-        if (detectedMode && detectedMode !== this._currentMode) {
-            // Check if Outlook is supported on this platform
-            const isOutlookSupported = process.platform === 'win32';
-            if (detectedMode === 'outlook' && !isOutlookSupported) {
-                // Don't auto-switch to Outlook on Mac/Linux
-                this.outputChannel.appendLine(`[AI Chat] Detected Outlook intent but not supported on ${process.platform}`);
-            } else {
-                // Auto-switch mode
-                this.outputChannel.appendLine(`[AI Chat] Auto-switching from ${this._currentMode} to ${detectedMode} based on message content`);
-                await vscode.commands.executeCommand('queryStudio.setMode', detectedMode);
-                // Show notification
-                const modeNames = { kusto: 'Kusto (KQL)', ado: 'Azure DevOps (WIQL)', outlook: 'Outlook (OQL)' };
-                vscode.window.showInformationMessage(`Switched to ${modeNames[detectedMode]} mode based on your query`);
+        // Never auto-switch AWAY from MCP mode — MCP is a meta-layer that can query
+        // various data sources (DevOps, GitHub, databases, etc.) whose keywords overlap
+        // with other modes. Switching away would silently break MCP query generation.
+        if (this._currentMode !== 'mcp') {
+            const detectedMode = this._detectIntendedMode(text);
+            if (detectedMode && detectedMode !== this._currentMode) {
+                // Check if Outlook is supported on this platform
+                const isOutlookSupported = process.platform === 'win32';
+                if (detectedMode === 'outlook' && !isOutlookSupported) {
+                    // Don't auto-switch to Outlook on Mac/Linux
+                    this.outputChannel.appendLine(`[AI Chat] Detected Outlook intent but not supported on ${process.platform}`);
+                } else {
+                    // Auto-switch mode
+                    this.outputChannel.appendLine(`[AI Chat] Auto-switching from ${this._currentMode} to ${detectedMode} based on message content`);
+                    await vscode.commands.executeCommand('queryStudio.setMode', detectedMode);
+                    // Show notification
+                    const modeNames: Record<string, string> = { kusto: 'Kusto (KQL)', ado: 'Azure DevOps (WIQL)', outlook: 'Outlook (OQL)' };
+                    vscode.window.showInformationMessage(`Switched to ${modeNames[detectedMode]} mode based on your query`);
+                }
             }
         }
 
@@ -591,6 +814,102 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 }
             }
 
+            // Get MCP tools context if in MCP mode — interactive server/tool selection
+            let mcpTools: { serverName: string; toolName: string; description?: string; parameters?: { name: string; type: string; description?: string; required: boolean }[] }[] | undefined;
+            if (this._currentMode === 'mcp') {
+                // Discover all available MCP tools
+                let allMcpTools: typeof mcpTools = [];
+
+                // Strategy 1: Use McpToolDiscovery (reads vscode.lm.tools + sidecar fallback)
+                if (this._mcpToolDiscovery) {
+                    await this._mcpToolDiscovery.discoverTools();
+                    const tools = this._mcpToolDiscovery.tools;
+                    if (tools.length > 0) {
+                        allMcpTools = tools.map(t => ({
+                            serverName: t.serverName,
+                            toolName: t.toolName,
+                            description: t.description || undefined,
+                            parameters: t.parameters.length > 0 ? t.parameters.map(p => ({
+                                name: p.name,
+                                type: p.type,
+                                description: p.description || undefined,
+                                required: p.required
+                            })) : undefined
+                        }));
+                    }
+                }
+
+                // Strategy 2: Direct sidecar query if discovery yielded nothing
+                if (!allMcpTools || allMcpTools.length === 0) {
+                    try {
+                        const schemaResult = await this.client.getMcpSchema();
+                        if (schemaResult?.servers) {
+                            const sidecarTools: typeof mcpTools = [];
+                            for (const [serverName, serverTools] of Object.entries(schemaResult.servers)) {
+                                if (!Array.isArray(serverTools)) continue;
+                                for (const tool of serverTools) {
+                                    const toolName = tool.name || '';
+                                    if (toolName.endsWith('_tools') && (!tool.description || tool.description.length < 50)) {
+                                        continue;
+                                    }
+                                    sidecarTools.push({
+                                        serverName,
+                                        toolName,
+                                        description: tool.description || undefined,
+                                        parameters: (tool.parameters || []).map((p: any) => ({
+                                            name: p.name || '',
+                                            type: p.type || 'string',
+                                            description: p.description || undefined,
+                                            required: p.required || false
+                                        }))
+                                    });
+                                }
+                            }
+                            if (sidecarTools.length > 0) {
+                                allMcpTools = sidecarTools;
+                            }
+                        }
+                    } catch (e) {
+                        this.outputChannel.appendLine(`[AI Chat] Sidecar schema query failed: ${e}`);
+                    }
+                }
+
+                // Interactive server/tool selection if no scope is pre-selected
+                if (allMcpTools && allMcpTools.length > 0) {
+                    if (!this._selectedMcpServer) {
+                        // First message in MCP mode — guide user through selection
+                        const filtered = await this._selectMcpScope(allMcpTools);
+                        if (!filtered) {
+                            // User cancelled — abort the message
+                            this._messages.pop(); // Remove the user message we already pushed
+                            return;
+                        }
+                        mcpTools = filtered;
+                    } else {
+                        // Server already selected — apply filter
+                        let filtered = allMcpTools.filter(t => t.serverName === this._selectedMcpServer);
+                        if (this._selectedMcpTool) {
+                            filtered = filtered.filter(t => t.toolName === this._selectedMcpTool);
+                        }
+                        mcpTools = filtered.length > 0 ? filtered : allMcpTools;
+                    }
+                }
+
+                // Log diagnostic info
+                const mcpToolCount = mcpTools?.length || 0;
+                const allToolCount = allMcpTools?.length || 0;
+                const lmToolCount = vscode.lm?.tools?.length ?? 0;
+                const mcpPrefixedCount = vscode.lm?.tools?.filter((t: any) => t.name.startsWith('mcp_')).length ?? 0;
+                this.outputChannel.appendLine(`[AI Chat] MCP tools: ${mcpToolCount} selected (of ${allToolCount} total) | Server: ${this._selectedMcpServer || 'All'} | Tool: ${this._selectedMcpTool || 'All'} | vscode.lm.tools: ${lmToolCount} total, ${mcpPrefixedCount} mcp_`);
+
+                if (mcpTools && mcpTools.length > 0) {
+                    const servers = [...new Set(mcpTools.map(t => t.serverName))];
+                    this.outputChannel.appendLine(`[AI Chat] Sending tools from servers: ${servers.join(', ')}`);
+                } else {
+                    this.outputChannel.appendLine(`[AI Chat] WARNING: No MCP tools to send`);
+                }
+            }
+
             const personaPrompt = this._getPersonaPrompt();
             let response = await this.client.aiChat({
                 message: text,
@@ -603,7 +922,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                     personaInstructions: personaPrompt,
                     systemPromptOverride: this._customSystemPrompt,
-                    adoContext
+                    adoContext,
+                    mcpTools
                 }
             });
 
@@ -624,7 +944,8 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                             recentQueries: recentQueries.length > 0 ? recentQueries : undefined,
                             personaInstructions: personaPrompt,
                             systemPromptOverride: this._customSystemPrompt,
-                            adoContext
+                            adoContext,
+                            mcpTools
                         }
                     });
                 } else {
@@ -704,7 +1025,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _extractQuery(text: string): string | undefined {
-        const codeBlockRegex = /```(?:kql|kusto|wiql|oql|outlook)?\s*([\s\S]*?)```/gi;
+        const codeBlockRegex = /```(?:kql|kusto|wiql|oql|outlook|mcpql|mcp)?\s*([\s\S]*?)```/gi;
         const matches = [...text.matchAll(codeBlockRegex)];
 
         if (matches.length > 0) {
@@ -726,13 +1047,14 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             persona: personaInfo
         });
         this._updateContextBar();
+        this._updateMcpContextChips();
     }
 
     private async _updateContextBar() {
         if (!this._view) return;
         try {
             const editor = vscode.window.activeTextEditor;
-            const queryLanguages = ['kql', 'wiql', 'oql'];
+            const queryLanguages = ['kql', 'wiql', 'oql', 'mcpql'];
             const hasQuery = editor && queryLanguages.includes(editor.document.languageId) && editor.document.getText().trim().length > 0;
             const currentQuery = hasQuery ? editor!.document.getText().trim() : '';
 
@@ -941,6 +1263,17 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         }
         .context-chip.inactive {
             opacity: 0.5;
+        }
+        .mcp-chip {
+            background: var(--vscode-textLink-foreground, #3794ff);
+            color: #fff;
+            font-weight: 500;
+        }
+        .mcp-chip:hover {
+            opacity: 0.85;
+        }
+        .mcp-chip.has-selection {
+            background: var(--vscode-testing-iconPassed, #4caf50);
         }
         .context-dropdown {
             position: absolute;
@@ -1362,6 +1695,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 <div id="historyContent" class="context-dropdown-empty">No history</div>
             </div>
         </div>
+        <div class="context-chip-wrapper mcp-chip-wrapper" id="mcpServerChipWrapper" style="display:none">
+            <span class="context-chip mcp-chip" id="mcpServerChip" onclick="changeMcpServer()" title="Click to change MCP server">Server: All</span>
+        </div>
+        <div class="context-chip-wrapper mcp-chip-wrapper" id="mcpToolChipWrapper" style="display:none">
+            <span class="context-chip mcp-chip" id="mcpToolChip" onclick="changeMcpTool()" title="Click to change MCP tool">Tool: All</span>
+        </div>
         <div class="context-chip-wrapper" style="margin-left:auto">
             <span class="system-prompt-chip" id="systemPromptChip" onclick="toggleSystemPrompt()" title="View or customize the AI system prompt">System Prompt</span>
             <div class="system-prompt-panel" id="systemPromptPanel">
@@ -1443,6 +1782,9 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'systemPromptSaved':
                     updateSystemPromptChip(msg.isCustom);
+                    break;
+                case 'updateMcpContext':
+                    updateMcpChips(msg.isMcpMode, msg.server, msg.tool);
                     break;
             }
         });
@@ -1626,6 +1968,50 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             const chip = document.getElementById('systemPromptChip');
             chip.classList.toggle('custom', isCustom);
             chip.title = isCustom ? 'System prompt customized - click to edit' : 'View or customize the AI system prompt';
+        }
+
+        function updateMcpChips(isMcpMode, server, tool) {
+            const serverWrapper = document.getElementById('mcpServerChipWrapper');
+            const toolWrapper = document.getElementById('mcpToolChipWrapper');
+            const serverChip = document.getElementById('mcpServerChip');
+            const toolChip = document.getElementById('mcpToolChip');
+
+            if (!isMcpMode) {
+                serverWrapper.style.display = 'none';
+                toolWrapper.style.display = 'none';
+                return;
+            }
+
+            serverWrapper.style.display = '';
+            toolWrapper.style.display = '';
+
+            if (server) {
+                serverChip.textContent = 'Server: ' + server;
+                serverChip.classList.add('has-selection');
+                serverChip.title = 'MCP Server: ' + server + ' (click to change)';
+            } else {
+                serverChip.textContent = 'Server: All';
+                serverChip.classList.remove('has-selection');
+                serverChip.title = 'Click to select an MCP server';
+            }
+
+            if (tool) {
+                toolChip.textContent = 'Tool: ' + tool;
+                toolChip.classList.add('has-selection');
+                toolChip.title = 'MCP Tool: ' + tool + ' (click to change)';
+            } else {
+                toolChip.textContent = 'Tool: All';
+                toolChip.classList.remove('has-selection');
+                toolChip.title = 'Click to select a specific MCP tool';
+            }
+        }
+
+        function changeMcpServer() {
+            vscode.postMessage({ command: 'changeMcpServer' });
+        }
+
+        function changeMcpTool() {
+            vscode.postMessage({ command: 'changeMcpTool' });
         }
 
         function renderMessages() {

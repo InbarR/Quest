@@ -8,12 +8,15 @@ import { ResultsHistoryWebViewProvider } from './providers/ResultsHistoryWebView
 import { SnippetsWebViewProvider } from './providers/SnippetsWebViewProvider';
 import { AIChatViewProvider } from './providers/AIChatViewProvider';
 import { FeedbackPanel } from './providers/FeedbackPanel';
-import { registerQueryCommands, resetActiveConnection, setActiveQueryType } from './commands/queryCommands';
+import { registerQueryCommands, resetActiveConnection, setActiveQueryType, setMcpToolDiscovery } from './commands/queryCommands';
 import { registerClusterCommands } from './commands/clusterCommands';
 import { registerAiCommands } from './commands/aiCommands';
 import { registerKqlLanguage } from './languages/kql/kqlLanguage';
 import { registerWiqlLanguage } from './languages/wiql/wiqlLanguage';
 import { registerOqlLanguage } from './languages/oql/oqlLanguage';
+import { registerMcpqlLanguage } from './languages/mcpql/mcpqlLanguage';
+import { McpConfigLoader } from './mcp/McpConfigLoader';
+import { McpToolDiscovery } from './mcp/McpToolDiscovery';
 import { parseData, isValidTableData } from './utils/dataParser';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -24,8 +27,13 @@ let modeStatusBarItem: vscode.StatusBarItem;
 let connectionStatusBarItem: vscode.StatusBarItem;
 let shortcutsStatusBarItem: vscode.StatusBarItem;
 let logStatusBarItem: vscode.StatusBarItem;
-let currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+let currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
 let queryCounter = 0;
+
+/** Map mode → language ID */
+const modeLangMap: Record<string, 'kql' | 'wiql' | 'oql' | 'mcpql'> = { kusto: 'kql', ado: 'wiql', outlook: 'oql', mcp: 'mcpql' };
+/** Map mode → file extension */
+const modeExtMap: Record<string, string> = { kusto: '.kql', ado: '.wiql', outlook: '.oql', mcp: '.mcpql' };
 let resultsProviderInstance: ResultsWebViewProvider;
 
 // Log buffer for feedback attachment (populated via intercepted outputChannel.appendLine)
@@ -35,15 +43,16 @@ export function getLogContent(): string {
 }
 
 // Export for use by other modules
-export function getCurrentMode(): 'kusto' | 'ado' | 'outlook' {
+export function getCurrentMode(): 'kusto' | 'ado' | 'outlook' | 'mcp' {
     return currentMode;
 }
 
-export function setCurrentMode(mode: 'kusto' | 'ado' | 'outlook') {
+export function setCurrentMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
     currentMode = mode;
     // Set context for when clauses in package.json
     vscode.commands.executeCommand('setContext', 'queryStudio.mode', mode);
     vscode.commands.executeCommand('setContext', 'queryStudio.isOutlookMode', mode === 'outlook');
+    vscode.commands.executeCommand('setContext', 'queryStudio.isMcpMode', mode === 'mcp');
 }
 
 export function updateConnectionStatus(connected: boolean) {
@@ -430,6 +439,112 @@ export async function activate(context: vscode.ExtensionContext) {
     registerWiqlLanguage(context, sidecar.client);
     registerOqlLanguage(context, sidecar.client);
 
+    // Initialize MCP infrastructure
+    const mcpConfigLoader = new McpConfigLoader();
+    const mcpToolDiscovery = new McpToolDiscovery(mcpConfigLoader);
+    mcpToolDiscovery.setSidecarClient(sidecar.client);
+    context.subscriptions.push(
+        { dispose: () => mcpConfigLoader.dispose() },
+        { dispose: () => mcpToolDiscovery.dispose() }
+    );
+    mcpConfigLoader.initialize();
+
+    // Wire MCP discovery into cluster tree provider and query commands
+    clusterProvider.setMcpDiscovery(
+        () => mcpToolDiscovery.getServerNames(),
+        (serverName: string) => mcpToolDiscovery.getToolsForServer(serverName)
+    );
+    setMcpToolDiscovery(mcpToolDiscovery);
+
+    // Wire MCP discovery into AI chat provider
+    aiChatProvider.setMcpToolDiscovery(mcpToolDiscovery);
+
+    // Register MCPQL language with dynamic tool discovery
+    registerMcpqlLanguage(
+        context,
+        sidecar.client,
+        () => mcpToolDiscovery.getServerNames(),
+        (serverName: string) => mcpToolDiscovery.getToolsForServer(serverName)
+    );
+
+    // When MCP config or tools change, push schema to sidecar
+    const pushMcpSchema = async () => {
+        try {
+            await mcpToolDiscovery.discoverTools();
+            const payload = mcpToolDiscovery.toSchemaPayload();
+            if (payload.length > 0) {
+                await sidecar.client.setMcpSchema(payload);
+                outputChannel.appendLine(`MCP schema pushed: ${payload.length} tools from ${[...new Set(payload.map(t => t.serverName))].join(', ')}`);
+            }
+            if (currentMode === 'mcp') {
+                clusterProvider.refresh();
+            }
+        } catch (err) {
+            outputChannel.appendLine(`MCP schema sync error: ${err}`);
+        }
+    };
+    mcpConfigLoader.onConfigChanged(pushMcpSchema);
+    // Also re-push when periodic discovery finds new tools
+    mcpToolDiscovery.onToolsChanged(async () => {
+        const payload = mcpToolDiscovery.toSchemaPayload();
+        if (payload.length > 0) {
+            try {
+                await sidecar.client.setMcpSchema(payload);
+                outputChannel.appendLine(`MCP schema updated (tools changed): ${payload.length} tools`);
+                if (currentMode === 'mcp') {
+                    clusterProvider.refresh();
+                }
+            } catch { /* sidecar might not be ready */ }
+        }
+    });
+    // Clear any stale MCP schema from previous sessions before fresh discovery
+    sidecar.client.clearMcpSchema().catch(() => {});
+    // Initial discovery (non-blocking) + start periodic retries for late-starting MCP servers
+    pushMcpSchema().catch(() => {});
+    mcpToolDiscovery.startPeriodicDiscovery();
+
+    // Register manual MCP tools refresh command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.refreshMcpTools', async () => {
+            outputChannel.appendLine('[MCP] Manual refresh triggered by user');
+            try {
+                const tools = await mcpToolDiscovery.manualRefresh();
+                if (tools.length > 0) {
+                    const realTools = tools.filter(t => !t.description.startsWith('[stub]'));
+                    const servers = [...new Set(tools.map(t => t.serverName))];
+
+                    // Push to sidecar
+                    const payload = mcpToolDiscovery.toSchemaPayload();
+                    if (payload.length > 0) {
+                        await sidecar.client.setMcpSchema(payload);
+                    }
+
+                    if (realTools.length > 0) {
+                        vscode.window.showInformationMessage(
+                            `MCP Tools: Found ${realTools.length} tools from ${servers.length} server(s): ${servers.join(', ')}`
+                        );
+                    } else {
+                        vscode.window.showWarningMessage(
+                            `MCP servers configured (${servers.join(', ')}) but tools not yet discovered. Servers may still be starting \u2014 try again in a few seconds.`
+                        );
+                    }
+
+                    if (currentMode === 'mcp') {
+                        clusterProvider.refresh();
+                    }
+                } else {
+                    vscode.window.showWarningMessage(
+                        'No MCP tools found. Make sure MCP servers are configured in .vscode/mcp.json or VS Code settings (mcp.servers).'
+                    );
+                }
+                outputChannel.appendLine(`[MCP] Manual refresh complete: ${tools.length} tools`);
+            } catch (err) {
+                outputChannel.appendLine(`[MCP] Manual refresh failed: ${err}`);
+                vscode.window.showErrorMessage(`MCP refresh failed: ${err}`);
+            }
+        })
+    );
+
     // Register all commands immediately (don't block on sidecar)
     // Commands will handle not-ready state gracefully
 
@@ -518,7 +633,7 @@ export async function activate(context: vscode.ExtensionContext) {
             });
             if (!code) return;
 
-            const lang = currentMode === 'kusto' ? 'kql' : currentMode === 'ado' ? 'wiql' : 'oql';
+            const lang = modeLangMap[currentMode];
             await snippetsProvider.addCustomSnippet({
                 name,
                 description,
@@ -537,7 +652,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register mode toggle command - shows quick pick to select mode
     context.subscriptions.push(
         vscode.commands.registerCommand('queryStudio.toggleMode', async () => {
-            const modes: { label: string; description: string; mode: 'kusto' | 'ado' | 'outlook' }[] = [
+            const modes: { label: string; description: string; mode: 'kusto' | 'ado' | 'outlook' | 'mcp' }[] = [
                 { label: 'Ⓚ Kusto (KQL)', description: 'Query KQL', mode: 'kusto' },
                 { label: 'Ⓐ Azure DevOps (ADO)', description: 'Query work items', mode: 'ado' },
             ];
@@ -548,6 +663,9 @@ export async function activate(context: vscode.ExtensionContext) {
             } else {
                 modes.push({ label: '📧 Outlook', description: '⚠️ Windows only', mode: 'outlook' });
             }
+
+            // MCP mode is always available
+            modes.push({ label: '🔌 MCP', description: 'Query MCP tools', mode: 'mcp' });
 
             // Mark current mode
             const items = modes.map(m => ({
@@ -582,8 +700,8 @@ export async function activate(context: vscode.ExtensionContext) {
             setActiveQueryType(newMode);
 
             // Create a new empty file with the correct language for the mode
-            const newLang = newMode === 'kusto' ? 'kql' : newMode === 'ado' ? 'wiql' : 'oql';
-            const ext = newMode === 'kusto' ? '.kql' : newMode === 'ado' ? '.wiql' : '.oql';
+            const newLang = modeLangMap[newMode];
+            const ext = modeExtMap[newMode];
 
             // Generate a simple query name
             const queryNumber = ++queryCounter;
@@ -618,7 +736,7 @@ export async function activate(context: vscode.ExtensionContext) {
             aiChatProvider.setMode(newMode);
             outputChannel.appendLine(`Switched to ${newMode.toUpperCase()} mode`);
         }),
-        vscode.commands.registerCommand('queryStudio.setMode', async (mode: 'kusto' | 'ado' | 'outlook') => {
+        vscode.commands.registerCommand('queryStudio.setMode', async (mode: 'kusto' | 'ado' | 'outlook' | 'mcp') => {
             // Check if trying to use Outlook on non-Windows
             if (mode === 'outlook' && !isOutlookSupported) {
                 vscode.window.showWarningMessage(
@@ -639,9 +757,9 @@ export async function activate(context: vscode.ExtensionContext) {
             const editor = vscode.window.activeTextEditor;
             if (editor) {
                 const currentLang = editor.document.languageId;
-                const queryLanguages = ['kql', 'wiql', 'oql', 'plaintext'];
+                const queryLanguages = ['kql', 'wiql', 'oql', 'mcpql', 'plaintext'];
                 if (queryLanguages.includes(currentLang) || editor.document.isUntitled) {
-                    const newLang = mode === 'kusto' ? 'kql' : mode === 'ado' ? 'wiql' : 'oql';
+                    const newLang = modeLangMap[mode];
                     await vscode.languages.setTextDocumentLanguage(editor.document, newLang);
                 }
             }
@@ -672,6 +790,9 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('queryStudio.switchToOutlook', () => {
             vscode.commands.executeCommand('queryStudio.setMode', 'outlook');
         }),
+        vscode.commands.registerCommand('queryStudio.switchToMcp', () => {
+            vscode.commands.executeCommand('queryStudio.setMode', 'mcp');
+        }),
         vscode.commands.registerCommand('queryStudio.newOqlFile', async () => {
             // Check if Outlook is supported on this platform
             if (!isOutlookSupported) {
@@ -685,6 +806,13 @@ export async function activate(context: vscode.ExtensionContext) {
             const doc = await vscode.workspace.openTextDocument({
                 content: 'Inbox\n| take 100\n',
                 language: 'oql'
+            });
+            await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
+        }),
+        vscode.commands.registerCommand('queryStudio.newMcpqlFile', async () => {
+            const doc = await vscode.workspace.openTextDocument({
+                content: '// MCP Query\n// server | tool(param=\'value\')\n',
+                language: 'mcpql'
             });
             await vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
         }),
@@ -751,9 +879,9 @@ export async function activate(context: vscode.ExtensionContext) {
             if (!selected) return;
 
             const editor = vscode.window.activeTextEditor;
-            const lang = currentMode === 'kusto' ? 'kql' : currentMode === 'ado' ? 'wiql' : 'oql';
+            const lang = modeLangMap[currentMode];
 
-            if (editor && ['kql', 'wiql', 'oql', 'plaintext'].includes(editor.document.languageId)) {
+            if (editor && ['kql', 'wiql', 'oql', 'mcpql', 'plaintext'].includes(editor.document.languageId)) {
                 // Insert at cursor position
                 await editor.edit(editBuilder => {
                     editBuilder.insert(editor.selection.active, selected.query);
@@ -1257,7 +1385,7 @@ export async function activate(context: vscode.ExtensionContext) {
     outputChannel.appendLine('Quest activated successfully (sidecar starting in background)');
 }
 
-export function updateModeStatusBar(type: 'kusto' | 'ado' | 'outlook' | null, name?: string) {
+export function updateModeStatusBar(type: 'kusto' | 'ado' | 'outlook' | 'mcp' | null, name?: string) {
     if (!modeStatusBarItem) return;
 
     if (type === 'kusto') {
@@ -1272,6 +1400,10 @@ export function updateModeStatusBar(type: 'kusto' | 'ado' | 'outlook' | null, na
         modeStatusBarItem.text = '📧 Outlook';
         modeStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
         modeStatusBarItem.tooltip = name ? `Mode: Outlook (OQL)\nActive: ${name}` : 'Mode: Outlook (OQL)\nQueries local Outlook via COM';
+    } else if (type === 'mcp') {
+        modeStatusBarItem.text = '🔌 MCP';
+        modeStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+        modeStatusBarItem.tooltip = name ? `Mode: MCP (MCPQL)\nActive: ${name}` : 'Mode: MCP (MCPQL)\nQuery MCP tools';
     } else {
         modeStatusBarItem.text = '$(question) No Source';
         modeStatusBarItem.backgroundColor = undefined;

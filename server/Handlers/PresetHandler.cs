@@ -57,7 +57,7 @@ public class PresetHandler
             Description = preset.Description,
             AutoSaved = preset.IsAutoSaved,
             Time = DateTime.Parse(preset.CreatedAt),
-            Mode = preset.Type switch { "ado" => PresetMode.ADO, "outlook" => PresetMode.Outlook, _ => PresetMode.Kusto },
+            Mode = preset.Type switch { "ado" => PresetMode.ADO, "outlook" => PresetMode.Outlook, "mcp" => PresetMode.MCP, _ => PresetMode.Kusto },
             Clusters = !string.IsNullOrEmpty(preset.ClusterUrl) ? new[]
             {
                 new KustoCluster
@@ -113,7 +113,7 @@ public class PresetHandler
             Description: p.Description,
             ClusterUrl: clusterUrl,
             Database: database,
-            Type: p.Mode switch { PresetMode.ADO => "ado", PresetMode.Outlook => "outlook", _ => "kusto" },
+            Type: p.Mode switch { PresetMode.ADO => "ado", PresetMode.Outlook => "outlook", PresetMode.MCP => "mcp", _ => "kusto" },
             CreatedAt: p.Time.ToString("O"),
             IsAutoSaved: p.AutoSaved
         );

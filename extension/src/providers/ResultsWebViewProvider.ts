@@ -15,7 +15,7 @@ interface ResultTab {
     clusterUrl?: string;
     database?: string;
     colorRules?: ColorRule[];
-    queryType?: 'kusto' | 'ado' | 'outlook';
+    queryType?: 'kusto' | 'ado' | 'outlook' | 'mcp';
     isLoading?: boolean;
     filterText?: string;
     filterMode?: 'filter' | 'highlight';
@@ -610,7 +610,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    public showLoading(query?: string, clusterUrl?: string, database?: string, queryType?: 'kusto' | 'ado' | 'outlook', replaceCurrentTab: boolean = false): string {
+    public showLoading(query?: string, clusterUrl?: string, database?: string, queryType?: 'kusto' | 'ado' | 'outlook' | 'mcp', replaceCurrentTab: boolean = false): string {
         let tabId: string;
 
         // If replaceCurrentTab is true and we have an active tab, reuse it
@@ -684,7 +684,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         query?: string,
         clusterUrl?: string,
         database?: string,
-        queryType?: 'kusto' | 'ado' | 'outlook',
+        queryType?: 'kusto' | 'ado' | 'outlook' | 'mcp',
         loadingTabId?: string
     ) {
         const rowCount = result.rowCount || 0;

@@ -43,6 +43,20 @@ public class AiHandler
         if (!string.IsNullOrWhiteSpace(request.Context?.PersonaInstructions))
             systemPrompt += "\n\n## PERSONA INSTRUCTIONS\n" + request.Context.PersonaInstructions;
 
+        // For MCP mode, include tool context in the SYSTEM prompt rather than the user message.
+        // System messages are never trimmed by TrimHistory, so tool info is always preserved.
+        // With 100+ tools the user-message approach exceeds TokenBudget and gets truncated.
+        if (mode == "mcp" && request.Context?.McpTools != null && request.Context.McpTools.Length > 0)
+        {
+            systemPrompt += "\n\n" + BuildMcpToolsSystemContext(request.Context.McpTools);
+        }
+        else if (mode == "mcp")
+        {
+            systemPrompt += "\n\n## AVAILABLE MCP TOOLS\nNo MCP tools or servers are currently available.\n"
+                + "Tell the user to:\n1. Configure MCP servers in .vscode/mcp.json or VS Code settings (mcp.servers)\n"
+                + "2. Wait for the MCP servers to start\n3. Run 'Quest: Refresh MCP Tools' command\n";
+        }
+
         session.UpdateSystemPrompt(systemPrompt);
 
         var userMessageWithContext = BuildUserMessageWithContext(request.Message, request.Context, mode);
@@ -454,6 +468,66 @@ ORDER BY [System.ChangedDate] DESC
 - For query requests: output the query in ```wiql blocks with brief explanation.
 - For non-query requests: plain text, no code fences.",
 
+            "mcp" => @"You are an MCPQL (MCP Query Language) assistant.
+
+## YOUR ROLE
+You help users write MCPQL queries to invoke MCP (Model Context Protocol) tools and post-process the results.
+You MUST use ONLY the tools listed in the '## AVAILABLE MCP TOOLS' section below. Never invent tool names or server names.
+
+## MCPQL SYNTAX
+```
+server | tool(param1='value1', param2='value2') | post-processing
+server.tool(param1='value1')  // dot syntax also works
+```
+
+The **server** is the MCP server name (e.g., `github`, `azuredevops`, `filesystem`).
+The **tool** is the tool name within that server (e.g., `list_issues`, `get_work_items`).
+Parameters use `name='value'` syntax with single quotes for strings.
+
+## POST-PROCESSING OPERATORS (applied on results, KQL-like)
+- `| where column op value` — Filter rows (operators: ==, !=, >, >=, <, <=, contains, startswith, endswith, has, matches)
+- `| project col1, col2` — Select specific columns
+- `| take N` — Limit to first N rows
+- `| sort by column [asc|desc]` — Sort rows
+- `| count` — Count total rows
+- `| extend newCol = expr` — Add a computed column
+
+## CRITICAL: TOOL SELECTION RULES
+1. **ONLY use tools from the '## AVAILABLE MCP TOOLS' section** — never guess or invent tool/server names
+2. Match the user's intent to the best available tool by reading the tool description
+3. Use the EXACT server name and tool name as shown (e.g., if listed as `azuredevops | get_work_items`, write `azuredevops | get_work_items(...)`)
+4. Include ALL required parameters with appropriate values based on the user's request
+5. Include optional parameters when they are relevant to what the user asked
+6. If no available tool matches the request, explain what tools ARE available and suggest the closest match
+
+## EXAMPLES
+```mcpql
+// List work items from Azure DevOps
+azuredevops | get_work_items(project='MyProject', query='SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = ''Active''')
+```
+
+```mcpql
+// List issues from a GitHub repo with filtering
+github | list_issues(repo='org/repo') | where state == 'open' | project title, author | take 10
+```
+
+```mcpql
+// Read a file
+filesystem | read_file(path='/tmp/data.csv')
+```
+
+## INSTRUCTIONS
+1. If the user provides a '## USER MCPQL' block, treat it as the CURRENT QUERY and modify it based on their request.
+2. **ALWAYS** use correct server and tool names from the AVAILABLE MCP TOOLS list — this is the single source of truth.
+3. Wrap queries in triple backticks (```mcpql).
+4. Include post-processing operators when the user wants to filter, sort, or limit results.
+5. Use single quotes for string parameter values.
+6. When the user mentions a specific project, server, or resource, use it as parameter values.
+
+## OUTPUT RULE
+- For query requests: output the query in ```mcpql blocks with brief explanation of what the query does and which tool it uses.
+- For non-query requests: plain text, no code fences.",
+
             _ => @"You are a KQL (Kusto Query Language) assistant.
 
 ## YOUR ROLE
@@ -499,6 +573,7 @@ When generating queries:
         {
             "outlook" => ("OQL", "oql"),
             "ado" => ("WIQL", "wiql"),
+            "mcp" => ("MCPQL", "mcpql"),
             _ => ("KQL", "kql")
         };
 
@@ -516,6 +591,10 @@ When generating queries:
                 sb.AppendLine($"... and {context.AvailableTables.Length - 100} more");
             sb.AppendLine();
         }
+
+        // MCP tools context is now included in the SYSTEM prompt (see ChatAsync).
+        // This prevents TrimHistory from truncating the tool list, which was the root
+        // cause of the AI responding with generic "no specific request" messages.
 
         // Add current query context if available - this is the key context
         if (context?.CurrentQuery != null && !string.IsNullOrWhiteSpace(context.CurrentQuery))
@@ -578,6 +657,105 @@ When generating queries:
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Builds MCP tool context to be injected into the SYSTEM prompt.
+    /// System messages are never trimmed by TrimHistory, which is critical when
+    /// the user has 100+ tools whose descriptions would otherwise blow the TokenBudget
+    /// and get truncated from the user message.
+    ///
+    /// For large tool sets (> 40 tools), uses a compact format (name + short description,
+    /// no parameter details) to keep the system prompt reasonable. Parameters are shown
+    /// only for the first 40 tools.
+    /// </summary>
+    private static string BuildMcpToolsSystemContext(McpToolContext[] mcpTools)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        var realTools = mcpTools.Where(t => t.Description == null || !t.Description.StartsWith("[stub]")).ToArray();
+        var stubTools = mcpTools.Where(t => t.Description != null && t.Description.StartsWith("[stub]")).ToArray();
+
+        if (realTools.Length > 0)
+        {
+            sb.AppendLine("## AVAILABLE MCP TOOLS");
+            sb.AppendLine("IMPORTANT: These are the ONLY tools you can use. Use the exact server and tool names shown below.");
+            sb.AppendLine("Query format: `server | tool(param='value')` or `server.tool(param='value')`");
+            sb.AppendLine();
+
+            var toolsByServer = realTools
+                .GroupBy(t => t.ServerName)
+                .OrderBy(g => g.Key);
+
+            // For large tool sets, use compact format after a threshold
+            const int fullDetailLimit = 40;
+            int toolIndex = 0;
+
+            foreach (var serverGroup in toolsByServer)
+            {
+                sb.AppendLine($"### Server: `{serverGroup.Key}`");
+                foreach (var tool in serverGroup)
+                {
+                    toolIndex++;
+                    bool showFullDetail = toolIndex <= fullDetailLimit;
+
+                    sb.AppendLine($"- **{serverGroup.Key} | {tool.ToolName}()**");
+
+                    if (!string.IsNullOrWhiteSpace(tool.Description))
+                    {
+                        // Truncate very long descriptions to keep prompt manageable
+                        var desc = tool.Description.Length > 120
+                            ? tool.Description.Substring(0, 117) + "..."
+                            : tool.Description;
+                        sb.AppendLine($"  Description: {desc}");
+                    }
+
+                    // Show parameters only for the first N tools to stay within token limits
+                    if (showFullDetail && tool.Parameters != null && tool.Parameters.Length > 0)
+                    {
+                        sb.AppendLine("  Parameters:");
+                        foreach (var p in tool.Parameters)
+                        {
+                            var req = p.Required ? " **[REQUIRED]**" : " (optional)";
+                            var paramDesc = !string.IsNullOrWhiteSpace(p.Description)
+                                ? (p.Description.Length > 80 ? $" — {p.Description.Substring(0, 77)}..." : $" — {p.Description}")
+                                : "";
+                            sb.AppendLine($"    - `{p.Name}`: {p.Type}{req}{paramDesc}");
+                        }
+                    }
+                }
+                sb.AppendLine();
+            }
+
+            if (toolIndex > fullDetailLimit)
+            {
+                sb.AppendLine($"_Note: {toolIndex - fullDetailLimit} tools shown in compact form (no parameters). Ask the user which tool they want to use for detailed parameter info._");
+                sb.AppendLine();
+            }
+        }
+        else if (stubTools.Length > 0)
+        {
+            var serverNames = stubTools.Select(t => t.ServerName).Distinct().ToArray();
+            sb.AppendLine("## AVAILABLE MCP SERVERS (tools pending discovery)");
+            sb.AppendLine($"The following MCP servers are CONFIGURED: {string.Join(", ", serverNames.Select(s => $"`{s}`"))}");
+            sb.AppendLine("Their tools have not been discovered yet (the servers may still be starting).");
+            sb.AppendLine();
+            sb.AppendLine("INSTRUCTIONS FOR STUB MODE:");
+            sb.AppendLine("1. Generate a TEMPLATE MCPQL query using the server name and a likely tool name based on common MCP patterns.");
+            sb.AppendLine("2. Common tool naming patterns: `list_*`, `get_*`, `search_*`, `create_*`, `update_*`, `delete_*`");
+            sb.AppendLine("3. Example templates:");
+            foreach (var server in serverNames)
+            {
+                sb.AppendLine($"   - `{server} | list_items()` or `{server} | get_data(id='...')`");
+            }
+            sb.AppendLine("4. CLEARLY tell the user:");
+            sb.AppendLine("   - The query uses estimated tool names that MAY need adjustment");
+            sb.AppendLine("   - They should run 'Quest: Refresh MCP Tools' command to discover actual tool names");
+            sb.AppendLine("   - After refresh, you can provide exact queries");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
     private static string? ExtractQuery(string response)
     {
         // Try to extract query from code blocks (KQL, WIQL, OQL)
@@ -586,6 +764,7 @@ When generating queries:
             @"```(?:kql|kusto)\n([\s\S]*?)```",
             @"```(?:wiql|sql)\n([\s\S]*?)```",
             @"```(?:oql|outlook)\n([\s\S]*?)```",
+            @"```(?:mcpql|mcp)\n([\s\S]*?)```",
             @"```\n([\s\S]*?)```"
         };
 

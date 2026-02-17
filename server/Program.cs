@@ -39,7 +39,7 @@ class Program
 
 When providing queries, always wrap them in code blocks with the appropriate language tag (```kql or ```wiql).
 Keep explanations concise and focus on providing working queries.",
-            TokenBudget = 8000,
+            TokenBudget = 32000,
             MaxHistoryMessages = 20,
             DeviceCodeCallback = async (url, code) =>
             {
@@ -166,7 +166,8 @@ Keep explanations concise and focus on providing working queries.",
             // Simple newline-delimited JSON-RPC over stdin/stdout
             var server = new SimpleJsonRpcServer(
                 healthHandler, queryHandler, clusterHandler,
-                presetHandler, schemaHandler, aiHandler, resultsHistoryHandler, outlookHandler, log);
+                presetHandler, schemaHandler, aiHandler, resultsHistoryHandler, outlookHandler,
+                dataSourceRegistry, log);
 
             log("JSON-RPC server ready");
 
@@ -195,13 +196,15 @@ public class SimpleJsonRpcServer
     private readonly AiHandler _ai;
     private readonly ResultsHistoryHandler _resultsHistory;
     private readonly OutlookHandler _outlook;
+    private readonly DataSourceRegistry _dataSourceRegistry;
     private readonly Action<string> _log;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public SimpleJsonRpcServer(
         HealthHandler health, QueryHandler query, ClusterHandler cluster,
         PresetHandler preset, SchemaHandler schema, AiHandler ai,
-        ResultsHistoryHandler resultsHistory, OutlookHandler outlook, Action<string> log)
+        ResultsHistoryHandler resultsHistory, OutlookHandler outlook,
+        DataSourceRegistry dataSourceRegistry, Action<string> log)
     {
         _health = health;
         _query = query;
@@ -211,6 +214,7 @@ public class SimpleJsonRpcServer
         _ai = ai;
         _resultsHistory = resultsHistory;
         _outlook = outlook;
+        _dataSourceRegistry = dataSourceRegistry;
         _log = log;
         _jsonOptions = new JsonSerializerOptions
         {
@@ -319,6 +323,9 @@ public class SimpleJsonRpcServer
                 "outlook/sendMail" => SendMail(paramsElement),
                 "outlook/getRuleDetails" => GetRuleDetails(paramsElement),
                 "outlook/updateRuleProperty" => UpdateRuleProperty(paramsElement),
+                "mcp/setSchema" => SetMcpSchema(paramsElement),
+                "mcp/getSchema" => GetMcpSchema(),
+                "mcp/clearSchema" => ClearMcpSchema(),
                 _ => throw new Exception($"Unknown method: {method}")
             };
 
@@ -526,6 +533,64 @@ public class SimpleJsonRpcServer
     }
 
     private object? GetDataSources() => _query.GetDataSources();
+
+    private object? SetMcpSchema(JsonElement p)
+    {
+        try
+        {
+            var request = JsonSerializer.Deserialize<McpSetSchemaRequest>(p.GetRawText(), _jsonOptions);
+            if (request?.Tools == null)
+                return new { success = false, error = "No tools provided" };
+
+            var mcpDataSource = _dataSourceRegistry.GetOrCreate("mcp") as McpDataSource;
+            if (mcpDataSource == null)
+                return new { success = false, error = "MCP data source not available" };
+
+            // Group tools by server name and set schema
+            var grouped = request.Tools.GroupBy(t => t.ServerName);
+            foreach (var group in grouped)
+            {
+                var tools = group.Select(t => new McpToolSchemaInfo
+                {
+                    Name = t.ToolName,
+                    Description = t.Description,
+                    Parameters = t.Parameters.Select(param => new McpToolParameterInfo
+                    {
+                        Name = param.Name,
+                        Type = param.Type,
+                        Description = param.Description,
+                        Required = param.Required
+                    }).ToArray()
+                }).ToArray();
+                mcpDataSource.SetToolSchema(group.Key, tools);
+            }
+
+            _log($"MCP schema set: {request.Tools.Length} tools from {grouped.Count()} servers");
+            return new { success = true, toolCount = request.Tools.Length };
+        }
+        catch (Exception ex)
+        {
+            _log($"Error setting MCP schema: {ex.Message}");
+            return new { success = false, error = ex.Message };
+        }
+    }
+
+    private object? ClearMcpSchema()
+    {
+        var mcpDataSource = _dataSourceRegistry.GetOrCreate("mcp") as McpDataSource;
+        mcpDataSource?.ClearSchema();
+        return new { success = true };
+    }
+
+    private object? GetMcpSchema()
+    {
+        var mcpDataSource = _dataSourceRegistry.GetOrCreate("mcp") as McpDataSource;
+        if (mcpDataSource == null)
+            return new { servers = new Dictionary<string, object>() };
+
+        var schema = mcpDataSource.GetToolSchema();
+        return new { servers = schema };
+    }
 
     private ImportKustoExplorerResponse ImportKustoExplorerConnections(JsonElement p)
     {
@@ -806,6 +871,19 @@ static partial class DataSourceInitializer
                 Factory = () => new OutlookDataSource(log)
             });
         }
+
+        // Register MCP data source
+        registry.Register(new DataSourceRegistration
+        {
+            Id = "mcp",
+            DisplayName = "MCP (Model Context Protocol)",
+            Icon = "\U0001F50C",
+            QueryLanguage = "MCPQL",
+            SortOrder = 4,
+            IsEnabled = true,
+            Description = "Query MCP tools using MCPQL",
+            Factory = () => new McpDataSource(log)
+        });
 
         log($"Registered {registry.GetAll().Count()} data sources");
     }

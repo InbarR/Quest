@@ -70,9 +70,10 @@ public class QueryHandler : IDisposable
 
             _log($"Using data source: {dataSource.Id} ({dataSource.DisplayName})");
 
-            // Validate connection parameters for non-Outlook data sources
+            // Validate connection parameters for non-Outlook/non-MCP data sources
             var isOutlook = dataSource.Id.Equals("outlook", StringComparison.OrdinalIgnoreCase);
-            if (!isOutlook)
+            var isMcp = dataSource.Id.Equals("mcp", StringComparison.OrdinalIgnoreCase);
+            if (!isOutlook && !isMcp)
             {
                 if (string.IsNullOrWhiteSpace(request.ClusterUrl))
                 {

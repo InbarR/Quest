@@ -8,6 +8,14 @@ import { ResultsHistoryWebViewProvider } from '../providers/ResultsHistoryWebVie
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
 import { EmailPreviewPanel } from '../providers/EmailPreviewPanel';
 import { getCurrentMode } from '../extension';
+import { McpQueryExecutor } from '../mcp/McpQueryExecutor';
+import { McpToolDiscovery } from '../mcp/McpToolDiscovery';
+
+let mcpToolDiscoveryInstance: McpToolDiscovery | undefined;
+
+export function setMcpToolDiscovery(discovery: McpToolDiscovery) {
+    mcpToolDiscoveryInstance = discovery;
+}
 
 /**
  * Find the query block at the cursor position.
@@ -129,7 +137,7 @@ function saveResultsToCsv(columns: string[], rows: any[][], title: string): stri
 
 let activeClusterUrl: string | undefined;
 let activeDatabase: string | undefined;
-let activeQueryType: 'kusto' | 'ado' | 'outlook' = 'kusto';
+let activeQueryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
 let statusBarItem: vscode.StatusBarItem | undefined;
 let maxResultsLimit: number = 1000;
 
@@ -137,7 +145,7 @@ interface ConnectionProfile {
     name: string;
     clusterUrl: string;
     database: string;
-    type: 'kusto' | 'ado' | 'outlook';
+    type: 'kusto' | 'ado' | 'outlook' | 'mcp';
 }
 
 let connectionProfiles: ConnectionProfile[] = [];
@@ -167,14 +175,14 @@ async function saveMaxResultsLimit() {
     }
 }
 
-export function setActiveConnection(clusterUrl: string, database: string, type: 'kusto' | 'ado' | 'outlook') {
+export function setActiveConnection(clusterUrl: string, database: string, type: 'kusto' | 'ado' | 'outlook' | 'mcp') {
     activeClusterUrl = clusterUrl;
     activeDatabase = database;
     activeQueryType = type;
     updateStatusBar();
 }
 
-export function getActiveConnection(): { clusterUrl?: string; database?: string; type: 'kusto' | 'ado' | 'outlook' } {
+export function getActiveConnection(): { clusterUrl?: string; database?: string; type: 'kusto' | 'ado' | 'outlook' | 'mcp' } {
     return { clusterUrl: activeClusterUrl, database: activeDatabase, type: activeQueryType };
 }
 
@@ -190,7 +198,7 @@ export function resetActiveConnection() {
 /**
  * Set just the query type (used when mode changes)
  */
-export function setActiveQueryType(type: 'kusto' | 'ado' | 'outlook') {
+export function setActiveQueryType(type: 'kusto' | 'ado' | 'outlook' | 'mcp') {
     console.log(`[Quest] setActiveQueryType called with: ${type}`);
     activeQueryType = type;
     updateStatusBar();
@@ -206,6 +214,11 @@ function updateStatusBar() {
         // Outlook doesn't need cluster/database - it's always local
         statusBarItem.text = '📧 Outlook';
         statusBarItem.tooltip = 'Mode: Outlook (OQL)\nConnects to local Outlook via COM';
+        statusBarItem.show();
+    } else if (activeQueryType === 'mcp') {
+        // MCP doesn't need cluster/database - uses MCP tools
+        statusBarItem.text = '🔌 MCP';
+        statusBarItem.tooltip = 'Mode: MCP (MCPQL)\nQuery MCP tools';
         statusBarItem.show();
     } else if (activeClusterUrl && activeDatabase) {
         // Extract short name from URL
@@ -464,16 +477,18 @@ export function registerQueryCommands(
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
             outputChannel.appendLine(`DEBUG: currentMode=${currentMode}, activeQueryType=${activeQueryType}, langId=${langId}`);
-            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+            const queryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = currentMode === 'mcp' ? 'mcp'
+                : currentMode === 'outlook' ? 'outlook'
                 : currentMode === 'ado' ? 'ado'
                 : currentMode === 'kusto' ? 'kusto'
+                : langId === 'mcpql' ? 'mcp'
                 : langId === 'oql' ? 'outlook'
                 : langId === 'wiql' ? 'ado'
                 : 'kusto';
             outputChannel.appendLine(`Language: ${langId}, Current mode: ${currentMode}, Using: ${queryType}`);
 
-            // Check for active connection (not needed for Outlook)
-            if (queryType !== 'outlook') {
+            // Check for active connection (not needed for Outlook or MCP)
+            if (queryType !== 'outlook' && queryType !== 'mcp') {
                 outputChannel.appendLine(`Active cluster: ${activeClusterUrl || '(none)'}, database: ${activeDatabase || '(none)'}`);
                 if (!activeClusterUrl || !activeDatabase) {
                     const config = vscode.workspace.getConfiguration('queryStudio');
@@ -488,7 +503,7 @@ export function registerQueryCommands(
                     }
                 }
             } else {
-                outputChannel.appendLine('Outlook mode - no cluster/database needed');
+                outputChannel.appendLine('Outlook/MCP mode - no cluster/database needed');
             }
 
             let loadingTabId: string | undefined;
@@ -518,8 +533,8 @@ export function registerQueryCommands(
                 // Use the status bar limit for all query types
                 const request: QueryRequest = {
                     query: query,
-                    clusterUrl: queryType === 'outlook' ? '' : (activeClusterUrl || ''),
-                    database: queryType === 'outlook' ? '' : (activeDatabase || ''),
+                    clusterUrl: (queryType === 'outlook' || queryType === 'mcp') ? '' : (activeClusterUrl || ''),
+                    database: (queryType === 'outlook' || queryType === 'mcp') ? '' : (activeDatabase || ''),
                     type: queryType,
                     timeout: config.get('queryTimeout') || 300,
                     maxResults: maxResultsLimit
@@ -534,7 +549,42 @@ export function registerQueryCommands(
 
                 (async () => {
                     try {
-                        const result = await client.executeQuery(request);
+                        let result = await client.executeQuery(request);
+
+                        // MCP interception: if the sidecar signals tool invocation is needed,
+                        // invoke the tool on the extension side and re-submit with raw JSON
+                        if (!result.success && result.error?.startsWith('MCP_INVOKE_REQUIRED:')) {
+                            outputChannel.appendLine('MCP tool invocation required - executing via extension...');
+                            try {
+                                if (!mcpToolDiscoveryInstance) {
+                                    throw new Error('MCP tool discovery not initialized');
+                                }
+                                const mcpExecutor = new McpQueryExecutor(mcpToolDiscoveryInstance);
+                                const parsed = mcpExecutor.parseQuery(currentQuery);
+                                if (!parsed) {
+                                    throw new Error('Failed to parse MCPQL query');
+                                }
+                                const rawJson = await mcpExecutor.executeTool(parsed);
+                                outputChannel.appendLine(`MCP tool returned ${rawJson.length} chars of JSON`);
+
+                                // Re-submit with raw JSON result for post-processing
+                                const mcpRequest: QueryRequest = {
+                                    query: currentQuery,
+                                    clusterUrl: 'mcp-result',
+                                    database: rawJson,
+                                    type: 'mcp',
+                                    timeout: config.get('queryTimeout') || 300,
+                                    maxResults: maxResultsLimit
+                                };
+                                result = await client.executeQuery(mcpRequest);
+                            } catch (mcpError) {
+                                const mcpMessage = mcpError instanceof Error ? mcpError.message : String(mcpError);
+                                outputChannel.appendLine(`MCP tool invocation failed: ${mcpMessage}`);
+                                resultsProvider.showError(mcpMessage, currentTabId);
+                                vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', false);
+                                return;
+                            }
+                        }
 
                         if (result.success) {
                             outputChannel.appendLine(`Query completed: ${result.rowCount} rows in ${result.executionTimeMs}ms`);
@@ -664,14 +714,16 @@ export function registerQueryCommands(
 
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
-            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+            const queryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = currentMode === 'mcp' ? 'mcp'
+                : currentMode === 'outlook' ? 'outlook'
                 : currentMode === 'ado' ? 'ado'
                 : currentMode === 'kusto' ? 'kusto'
+                : langId === 'mcpql' ? 'mcp'
                 : langId === 'oql' ? 'outlook'
                 : langId === 'wiql' ? 'ado'
                 : 'kusto';
 
-            if (queryType !== 'outlook') {
+            if (queryType !== 'outlook' && queryType !== 'mcp') {
                 if (!activeClusterUrl || !activeDatabase) {
                     const config = vscode.workspace.getConfiguration('queryStudio');
                     activeClusterUrl = config.get('defaultCluster') || '';
@@ -697,8 +749,8 @@ export function registerQueryCommands(
 
                 const request: QueryRequest = {
                     query: query,
-                    clusterUrl: queryType === 'outlook' ? '' : (activeClusterUrl || ''),
-                    database: queryType === 'outlook' ? '' : (activeDatabase || ''),
+                    clusterUrl: (queryType === 'outlook' || queryType === 'mcp') ? '' : (activeClusterUrl || ''),
+                    database: (queryType === 'outlook' || queryType === 'mcp') ? '' : (activeDatabase || ''),
                     type: queryType,
                     timeout: config.get('queryTimeout') || 300,
                     maxResults: config.get('maxResults') || 10000
@@ -712,7 +764,36 @@ export function registerQueryCommands(
 
                 (async () => {
                     try {
-                        const result = await client.executeQuery(request);
+                        let result = await client.executeQuery(request);
+
+                        // MCP interception for alternate mode
+                        if (!result.success && result.error?.startsWith('MCP_INVOKE_REQUIRED:')) {
+                            try {
+                                if (!mcpToolDiscoveryInstance) {
+                                    throw new Error('MCP tool discovery not initialized');
+                                }
+                                const mcpExecutor = new McpQueryExecutor(mcpToolDiscoveryInstance);
+                                const parsed = mcpExecutor.parseQuery(currentQuery);
+                                if (!parsed) {
+                                    throw new Error('Failed to parse MCPQL query');
+                                }
+                                const rawJson = await mcpExecutor.executeTool(parsed);
+                                const mcpRequest: QueryRequest = {
+                                    query: currentQuery,
+                                    clusterUrl: 'mcp-result',
+                                    database: rawJson,
+                                    type: 'mcp',
+                                    timeout: config.get('queryTimeout') || 300,
+                                    maxResults: config.get('maxResults') || 10000
+                                };
+                                result = await client.executeQuery(mcpRequest);
+                            } catch (mcpError) {
+                                const mcpMessage = mcpError instanceof Error ? mcpError.message : String(mcpError);
+                                resultsProvider.showError(mcpMessage, currentTabId);
+                                vscode.commands.executeCommand('setContext', 'queryStudio.isRunning', false);
+                                return;
+                            }
+                        }
 
                         if (result.success) {
                             let title = 'Query Results';
@@ -896,7 +977,7 @@ export function registerQueryCommands(
 
             // Get current mode and create appropriate file
             const mode = activeQueryType || 'kusto';
-            const ext = mode === 'ado' ? 'wiql' : mode === 'outlook' ? 'oql' : 'kql';
+            const ext = mode === 'ado' ? 'wiql' : mode === 'outlook' ? 'oql' : mode === 'mcp' ? 'mcpql' : 'kql';
             const langId = ext;
 
             const fileName = `query_${Date.now()}.${ext}`;
@@ -926,9 +1007,11 @@ export function registerQueryCommands(
 
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
-            const queryType: 'kusto' | 'ado' | 'outlook' = currentMode === 'outlook' ? 'outlook'
+            const queryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = currentMode === 'mcp' ? 'mcp'
+                : currentMode === 'outlook' ? 'outlook'
                 : currentMode === 'ado' ? 'ado'
                 : currentMode === 'kusto' ? 'kusto'
+                : langId === 'mcpql' ? 'mcp'
                 : langId === 'oql' ? 'outlook'
                 : langId === 'wiql' ? 'ado'
                 : 'kusto';
@@ -1006,13 +1089,13 @@ export function registerQueryCommands(
             outputChannel.appendLine(`  database: ${preset.database || '(none)'}`);
             outputChannel.appendLine(`  type: ${preset.type}`);
 
-            const language = preset.type === 'ado' ? 'wiql' : preset.type === 'outlook' ? 'oql' : 'kql';
-            const ext = language === 'wiql' ? '.wiql' : language === 'oql' ? '.oql' : '.kql';
+            const language = preset.type === 'ado' ? 'wiql' : preset.type === 'outlook' ? 'oql' : preset.type === 'mcp' ? 'mcpql' : 'kql';
+            const ext = language === 'wiql' ? '.wiql' : language === 'oql' ? '.oql' : language === 'mcpql' ? '.mcpql' : '.kql';
 
             // Check if there's an active editor with a compatible language
             const editor = vscode.window.activeTextEditor;
             const activeLanguage = editor?.document.languageId;
-            const isCompatibleEditor = editor && (activeLanguage === 'kql' || activeLanguage === 'wiql' || activeLanguage === 'oql');
+            const isCompatibleEditor = editor && (activeLanguage === 'kql' || activeLanguage === 'wiql' || activeLanguage === 'oql' || activeLanguage === 'mcpql');
 
             if (isCompatibleEditor && editor) {
                 // Replace content in current editor

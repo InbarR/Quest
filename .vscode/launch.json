@@ -1,0 +1,49 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/extension"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/extension/out/**/*.js"
+            ],
+            "preLaunchTask": "build-all",
+            "sourceMaps": true
+        },
+        {
+            "name": "Launch Extension (No Build)",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/extension"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/extension/out/**/*.js"
+            ],
+            "sourceMaps": true
+        },
+        {
+            "name": "Attach to Server",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
+        },
+        {
+            "name": "Launch Server (standalone)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/server/bin/Debug/net8.0/QueryStudio.Server.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/server",
+            "console": "integratedTerminal",
+            "preLaunchTask": "build-server",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            }
+        }
+    ]
+}
