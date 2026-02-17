@@ -331,6 +331,27 @@ public class KustoDataSource : IDataSource, ISchemaProvider, IDataSourceHelp, IE
                 Description = "Create time series chart",
                 Query = "TableName\n| where Timestamp > ago(7d)\n| summarize count() by bin(Timestamp, 1h)\n| render timechart",
                 Category = "Visualization"
+            },
+            new QueryExample
+            {
+                Title = "Show Tables",
+                Description = "List all tables in the database",
+                Query = ".show tables",
+                Category = "Commands"
+            },
+            new QueryExample
+            {
+                Title = "Show Version",
+                Description = "Show the cluster version",
+                Query = ".show version",
+                Category = "Commands"
+            },
+            new QueryExample
+            {
+                Title = "Show Schema",
+                Description = "Show the database schema as JSON",
+                Query = ".show database schema as json",
+                Category = "Commands"
             }
         };
     }
@@ -345,6 +366,12 @@ public class KustoDataSource : IDataSource, ISchemaProvider, IDataSourceHelp, IE
 4. Aggregate: | summarize count() by GroupColumn
 5. Sort: | order by Column desc
 6. Project columns: | project Col1, Col2, Col3
+
+Control Commands (start with '.'):
+7. .show tables — List all tables
+8. .show version — Show cluster version
+9. .show database schema as json — Show schema
+10. .show operations — List recent operations
 
 Press Ctrl+Space for autocomplete.";
 
