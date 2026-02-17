@@ -361,6 +361,27 @@ public class McpqlParser
         };
     }
 
+    /// <summary>
+    /// Returns true if the token type is a keyword that can also be used as an identifier
+    /// (e.g. parameter names in tool invocations like "project='MCAS'").
+    /// </summary>
+    private static bool IsKeywordToken(McpqlTokenType type) => type switch
+    {
+        McpqlTokenType.Where   => true,
+        McpqlTokenType.Project => true,
+        McpqlTokenType.Take    => true,
+        McpqlTokenType.Sort    => true,
+        McpqlTokenType.By      => true,
+        McpqlTokenType.Count   => true,
+        McpqlTokenType.Extend  => true,
+        McpqlTokenType.Asc     => true,
+        McpqlTokenType.Desc    => true,
+        McpqlTokenType.And     => true,
+        McpqlTokenType.Or      => true,
+        McpqlTokenType.Not     => true,
+        _ => false
+    };
+
     private Dictionary<string, object> ParseParameters(List<McpqlToken> tokens, ref int pos)
     {
         var parameters = new Dictionary<string, object>();
@@ -371,8 +392,9 @@ public class McpqlParser
 
         while (pos < tokens.Count)
         {
-            // Parameter name
-            if (tokens[pos].Type != McpqlTokenType.Identifier)
+            // Parameter name — allow keywords (project, where, sort, etc.) as parameter names
+            // since MCP tools often have parameters named after MCPQL reserved words
+            if (tokens[pos].Type != McpqlTokenType.Identifier && !IsKeywordToken(tokens[pos].Type))
                 throw new McpqlParseException($"Expected parameter name, got '{tokens[pos].Value}'",
                     tokens[pos].Line, tokens[pos].Column);
             var paramName = tokens[pos].Value;
@@ -395,6 +417,7 @@ public class McpqlParser
                 McpqlTokenType.Number => double.TryParse(tokens[pos].Value, out var d) ? (d == Math.Floor(d) ? (object)(long)d : d) : tokens[pos].Value,
                 McpqlTokenType.Boolean => bool.Parse(tokens[pos].Value),
                 McpqlTokenType.Identifier => tokens[pos].Value, // unquoted string value
+                _ when IsKeywordToken(tokens[pos].Type) => tokens[pos].Value, // keyword used as unquoted value
                 _ => throw new McpqlParseException($"Unexpected value type for parameter '{paramName}'",
                     tokens[pos].Line, tokens[pos].Column)
             };

@@ -96,6 +96,12 @@ export function registerClusterCommands(
                 return;
             }
 
+            // Switch mode if the data source type differs from current mode
+            const currentMode = getCurrentMode();
+            if (cluster.type !== currentMode) {
+                await vscode.commands.executeCommand('queryStudio.setMode', cluster.type);
+            }
+
             setActiveConnection(cluster.url, cluster.database, cluster.type);
             clusterProvider.setActiveCluster(cluster);
 
