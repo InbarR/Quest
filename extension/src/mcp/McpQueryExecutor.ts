@@ -111,6 +111,8 @@ export class McpQueryExecutor implements vscode.Disposable {
     /**
      * Resolve the actual VS Code tool name from server + tool names.
      * Handles the mcp_serverName_toolName naming convention.
+     * VS Code registers MCP tools as "mcp_<serverName>_<toolName>" where the
+     * server name may contain hyphens or underscores (matching the mcp.json key).
      */
     private resolveToolName(serverName: string, toolName: string): string | undefined {
         if (!vscode.lm?.tools) {
@@ -126,28 +128,56 @@ export class McpQueryExecutor implements vscode.Disposable {
             }
         }
 
-        // Try mcp_serverName_toolName pattern
-        const mcpToolName = `mcp_${normalizedServer}_${toolName}`;
+        // Try mcp_serverName_toolName pattern (both original and normalized)
+        const candidates = new Set([
+            `mcp_${serverName}_${toolName}`,         // original (e.g. mcp_azure-devops_wit_...)
+            `mcp_${normalizedServer}_${toolName}`,   // hyphens→underscores
+        ]);
         for (const tool of vscode.lm.tools) {
-            if (tool.name === mcpToolName) {
+            if (candidates.has(tool.name)) {
                 return tool.name;
             }
         }
 
-        // Try partial match: tool name contains the specified tool name
+        // Try partial match: tool name contains both server and tool identifiers.
+        // Check with both original and normalized server name to handle hyphens.
+        const serverVariants = [serverName.toLowerCase(), normalizedServer.toLowerCase()];
+        const toolLower = toolName.toLowerCase();
         for (const tool of vscode.lm.tools) {
-            if (tool.name.toLowerCase().includes(normalizedServer.toLowerCase()) &&
-                tool.name.toLowerCase().includes(toolName.toLowerCase())) {
+            const nameLower = tool.name.toLowerCase();
+            if (serverVariants.some(sv => nameLower.includes(sv)) &&
+                nameLower.includes(toolLower)) {
                 return tool.name;
             }
         }
 
-        // Last resort: find any tool from the same server
+        // Last resort: find the full VS Code tool name via discovery metadata.
+        // We need to reconstruct the full name since McpToolInfo only stores short names.
         const serverTools = this.toolDiscovery.getToolsForServer(serverName);
-        const matchedTool = serverTools.find(t => 
-            t.toolName.toLowerCase().includes(toolName.toLowerCase())
+        const matchedTool = serverTools.find(t =>
+            t.toolName.toLowerCase() === toolLower ||
+            t.toolName.toLowerCase().includes(toolLower)
         );
-        return matchedTool?.toolName;
+        if (matchedTool) {
+            // Reconstruct the full VS Code tool name and verify it exists
+            for (const sv of [serverName, normalizedServer]) {
+                const fullName = `mcp_${sv}_${matchedTool.toolName}`;
+                for (const tool of vscode.lm.tools) {
+                    if (tool.name === fullName) {
+                        return fullName;
+                    }
+                }
+            }
+            // If reconstruction didn't work, scan for any tool ending with the matched name
+            const suffix = `_${matchedTool.toolName}`;
+            for (const tool of vscode.lm.tools) {
+                if (tool.name.endsWith(suffix)) {
+                    return tool.name;
+                }
+            }
+        }
+
+        return undefined;
     }
 
     /**
