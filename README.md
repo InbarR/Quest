@@ -13,7 +13,7 @@ A powerful VS Code extension for querying multiple data sources with AI assistan
 
 | Source | Language | Description |
 |--------|----------|-------------|
-| **Azure Data Explorer** | KQL | Query Kusto clusters with full IntelliSense and schema explorer |
+| **Azure Data Explorer** | KQL | Query Kusto clusters with full IntelliSense and schema explorer. Supports both KQL queries and control commands (`.show`, `.alter`, `.create`, `.drop`) |
 | **Azure DevOps** | WIQL | Query work items with preview panel showing description/repro steps |
 | **Outlook** | OQL | Query local Outlook mail, calendar, contacts using KQL-like syntax |
 

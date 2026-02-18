@@ -74,18 +74,20 @@ namespace MyTools.Core
                 logAction?.Invoke($"Running query on {clusterName}:{database}");
             }
 
+            // Detect if this is a control command (starts with '.')
+            var isControlCommand = query.TrimStart().StartsWith(".");
+
             // Run the entire query execution on a background thread to avoid UI freezing
             return await Task.Run(async () =>
             {
                 var result = new KustoResult();
                 var rows = new List<string[]>();
                 ICslQueryProvider queryProvider = null;
+                ICslAdminProvider adminProvider = null;
                 IDataReader reader = null;
 
                 try
                 {
-                    queryProvider = KustoClientFactory.CreateCslQueryProvider(kcsb);
-                    
                     var clientRequestProperties = new ClientRequestProperties 
                     { 
                         ClientRequestId = "MyKusto " + Guid.NewGuid(),
@@ -102,6 +104,7 @@ namespace MyTools.Core
                         {
                             reader?.Dispose();
                             queryProvider?.Dispose();
+                            adminProvider?.Dispose();
                             logAction?.Invoke("Query cancellation requested - cleaning up resources");
                         }
                         catch
@@ -110,7 +113,18 @@ namespace MyTools.Core
                         }
                     }))
                     {
-                        reader = await queryProvider.ExecuteQueryAsync(database, query, clientRequestProperties);
+                        if (isControlCommand)
+                        {
+                            // Control commands (.show, .alter, .create, .drop, etc.) use the admin/mgmt endpoint
+                            adminProvider = KustoClientFactory.CreateCslAdminProvider(kcsb);
+                            reader = await adminProvider.ExecuteControlCommandAsync(database, query, clientRequestProperties);
+                        }
+                        else
+                        {
+                            // Regular KQL queries use the query endpoint
+                            queryProvider = KustoClientFactory.CreateCslQueryProvider(kcsb);
+                            reader = await queryProvider.ExecuteQueryAsync(database, query, clientRequestProperties);
+                        }
                         
                         cancellationToken.ThrowIfCancellationRequested();
                         
@@ -150,6 +164,7 @@ namespace MyTools.Core
                     // Ensure resources are disposed even if an exception occurs
                     try { reader?.Dispose(); } catch { }
                     try { queryProvider?.Dispose(); } catch { }
+                    try { adminProvider?.Dispose(); } catch { }
                 }
 
                 return result;

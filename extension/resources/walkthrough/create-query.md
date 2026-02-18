@@ -21,6 +21,13 @@ StormEvents
 | take 100
 ```
 
+### KQL Control Command
+```kql
+.show tables
+```
+
+Control commands (starting with `.`) are also supported — `.show version`, `.show database schema as json`, `.show operations`, etc.
+
 ### OQL Query
 ```oql
 Inbox
