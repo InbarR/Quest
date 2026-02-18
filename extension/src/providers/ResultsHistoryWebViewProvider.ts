@@ -6,7 +6,7 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
 
     private _view?: vscode.WebviewView;
     private _history: ResultHistoryItem[] = [];
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private _onViewResult?: (item: ResultHistoryItem) => void;
     private _pendingRefresh = false;
 
@@ -15,7 +15,7 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
         private readonly _client: SidecarClient
     ) {}
 
-    public setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
         this.refresh();
     }

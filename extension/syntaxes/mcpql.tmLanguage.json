@@ -1,0 +1,175 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MCPQL",
+  "scopeName": "source.mcpql",
+  "fileTypes": ["mcpql"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#booleans" },
+    { "include": "#pipe-operator" },
+    { "include": "#post-processing-keywords" },
+    { "include": "#comparison-operators" },
+    { "include": "#logical-operators" },
+    { "include": "#sort-modifiers" },
+    { "include": "#tool-invocation" },
+    { "include": "#parameter-assignment" },
+    { "include": "#parentheses" },
+    { "include": "#commas" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.mcpql",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.mcpql",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mcpql",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.mcpql",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.mcpql",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.mcpql",
+          "match": "\\b-?\\d+(\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.mcpql",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "pipe-operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.pipe.mcpql",
+          "match": "\\|"
+        }
+      ]
+    },
+    "post-processing-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.mcpql",
+          "match": "\\b(where|project|take|sort|by|count|extend)\\b"
+        }
+      ]
+    },
+    "comparison-operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.mcpql",
+          "match": "==|!=|>=|<=|>|<"
+        },
+        {
+          "name": "keyword.operator.comparison.word.mcpql",
+          "match": "\\b(contains|startswith|endswith|has|matches)\\b"
+        }
+      ]
+    },
+    "logical-operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.mcpql",
+          "match": "\\b(and|or|not)\\b"
+        }
+      ]
+    },
+    "sort-modifiers": {
+      "patterns": [
+        {
+          "name": "keyword.other.sort-direction.mcpql",
+          "match": "\\b(asc|desc)\\b"
+        }
+      ]
+    },
+    "tool-invocation": {
+      "patterns": [
+        {
+          "comment": "server | tool(...) pattern — server name before first pipe or dot",
+          "match": "^\\s*(\\w[\\w\\-]*)\\s*(?=[|.])",
+          "captures": {
+            "1": { "name": "entity.name.class.server.mcpql" }
+          }
+        },
+        {
+          "comment": "Tool name after pipe or dot, before parenthesis",
+          "match": "(?<=[|.]\\s*)(\\w[\\w\\-]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "entity.name.function.tool.mcpql" }
+          }
+        }
+      ]
+    },
+    "parameter-assignment": {
+      "patterns": [
+        {
+          "comment": "Parameter name before = inside parentheses",
+          "match": "\\b(\\w+)\\s*(?==)",
+          "captures": {
+            "1": { "name": "variable.parameter.mcpql" }
+          }
+        }
+      ]
+    },
+    "parentheses": {
+      "patterns": [
+        {
+          "name": "punctuation.paren.open.mcpql",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.paren.close.mcpql",
+          "match": "\\)"
+        }
+      ]
+    },
+    "commas": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.mcpql",
+          "match": ","
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.mcpql",
+          "match": "\\b\\w[\\w\\-]*\\b"
+        }
+      ]
+    }
+  }
+}

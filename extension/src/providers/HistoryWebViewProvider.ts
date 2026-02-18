@@ -6,14 +6,14 @@ export class HistoryWebViewProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private _history: PresetInfo[] = [];
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _client: SidecarClient
     ) {}
 
-    public setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
         this.refresh();
     }

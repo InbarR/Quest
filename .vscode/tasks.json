@@ -1,0 +1,51 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-extension",
+            "type": "npm",
+            "script": "compile",
+            "path": "extension",
+            "problemMatcher": "$tsc",
+            "group": "build"
+        },
+        {
+            "label": "watch-extension",
+            "type": "npm",
+            "script": "watch",
+            "path": "extension",
+            "problemMatcher": "$tsc-watch",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "never"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build-server",
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/server/Quest.Server.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary;ForceNoAlign"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build"
+        },
+        {
+            "label": "build-all",
+            "dependsOn": [
+                "build-server",
+                "build-extension"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": [],
+            "group": "build"
+        }
+    ]
+}

@@ -30,6 +30,9 @@
     "wiql",
     "outlook",
     "oql",
+    "mcp",
+    "mcpql",
+    "model context protocol",
     "query",
     "ai",
     "copilot"
@@ -38,10 +41,12 @@
     "onLanguage:kql",
     "onLanguage:wiql",
     "onLanguage:oql",
+    "onLanguage:mcpql",
     "onView:querystudio.clusters",
     "onCommand:queryStudio.newKqlFile",
     "onCommand:queryStudio.newWiqlFile",
     "onCommand:queryStudio.newOqlFile",
+    "onCommand:queryStudio.newMcpqlFile",
     "onUri"
   ],
   "main": "./out/extension.js",
@@ -159,6 +164,18 @@
           ".oql"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "mcpql",
+        "aliases": [
+          "MCPQL",
+          "MCP Query Language",
+          "mcp"
+        ],
+        "extensions": [
+          ".mcpql"
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -176,6 +193,11 @@
         "language": "oql",
         "scopeName": "source.oql",
         "path": "./syntaxes/oql.tmLanguage.json"
+      },
+      {
+        "language": "mcpql",
+        "scopeName": "source.mcpql",
+        "path": "./syntaxes/mcpql.tmLanguage.json"
       }
     ],
     "commands": [
@@ -231,6 +253,12 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.newMcpqlFile",
+        "title": "New MCP Query",
+        "icon": "$(new-file)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.newQuery",
         "title": "New Query",
         "icon": "$(new-file)",
@@ -275,6 +303,12 @@
       {
         "command": "queryStudio.refreshClusters",
         "title": "Refresh Data Sources",
+        "icon": "$(refresh)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.refreshMcpTools",
+        "title": "Refresh MCP Tools",
         "icon": "$(refresh)",
         "category": "Quest"
       },
@@ -444,6 +478,11 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.switchToMcp",
+        "title": "Switch to MCP Mode",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.setMode",
         "title": "Set Query Mode",
         "icon": "$(settings)",
@@ -538,27 +577,27 @@
       {
         "command": "queryStudio.runQuery",
         "key": "F5",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.runQueryAlternate",
         "key": "ctrl+shift+enter",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.cancelQuery",
         "key": "shift+F5",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.saveAsPreset",
         "key": "ctrl+shift+s",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.aiChat",
         "key": "ctrl+shift+c",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.switchToKusto",
@@ -573,23 +612,27 @@
         "key": "ctrl+shift+o"
       },
       {
+        "command": "queryStudio.switchToMcp",
+        "key": "ctrl+shift+m"
+      },
+      {
         "command": "queryStudio.reportIssue",
         "key": "ctrl+shift+b"
       },
       {
         "command": "queryStudio.showKeyboardShortcuts",
         "key": "ctrl+shift+/",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.toggleMode",
         "key": "ctrl+alt+m",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.switchConnectionProfile",
         "key": "ctrl+alt+p",
-        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql)"
+        "when": "editorTextFocus && (editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql)"
       },
       {
         "command": "queryStudio.pasteAsTable",
@@ -622,22 +665,22 @@
       "editor/title": [
         {
           "command": "queryStudio.showPanel",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql",
           "group": "navigation@0"
         },
         {
           "submenu": "queryStudio.runSubmenu",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql",
           "group": "navigation@1"
         },
         {
           "command": "queryStudio.showExample",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql",
           "group": "navigation@2"
         },
         {
           "command": "queryStudio.aiChat",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql",
           "group": "navigation@3"
         }
       ],
@@ -670,7 +713,7 @@
       "editor/context": [
         {
           "submenu": "queryStudio.contextSubmenu",
-          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql",
+          "when": "editorLangId == kql || editorLangId == wiql || editorLangId == oql || editorLangId == mcpql",
           "group": "queryStudio"
         }
       ],

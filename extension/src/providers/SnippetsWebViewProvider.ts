@@ -5,7 +5,7 @@ export interface Snippet {
     name: string;
     description: string;
     code: string;
-    language: 'kql' | 'wiql' | 'oql' | 'all';
+    language: 'kql' | 'wiql' | 'oql' | 'mcpql' | 'all';
     category: string;
     isBuiltIn: boolean;
 }
@@ -404,7 +404,7 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private _customSnippets: Snippet[] = [];
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private _context: vscode.ExtensionContext;
 
     constructor(
@@ -415,7 +415,7 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
         this._loadCustomSnippets();
     }
 
-    public setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
         this._updateView();
     }
@@ -450,7 +450,7 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
         return [...BUILT_IN_SNIPPETS, ...this._customSnippets];
     }
 
-    public getSnippetsForMode(mode: 'kusto' | 'ado' | 'outlook'): Snippet[] {
+    public getSnippetsForMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp'): Snippet[] {
         const lang = mode === 'kusto' ? 'kql' : mode === 'ado' ? 'wiql' : 'oql';
         return this.getAllSnippets().filter(s => s.language === lang || s.language === 'all');
     }

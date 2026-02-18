@@ -21,7 +21,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
     private readonly _extensionUri: vscode.Uri;
     private _messages: ChatMessage[] = [];
     private _isProcessing = false;
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private _suggestions: ZeroPromptSuggestion[] = [];
 
     private _onInsertQuery?: (query: string) => void;
@@ -35,7 +35,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
         this._extensionUri = extensionUri;
     }
 
-    public async setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public async setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
         await this._loadSuggestions();
         this._updateView();
@@ -123,6 +123,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
             case 'kusto': return 'KQL';
             case 'ado': return 'WIQL';
             case 'outlook': return 'OQL';
+            case 'mcp': return 'MCPQL';
         }
     }
 
@@ -131,6 +132,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
             case 'kusto': return 'Ⓚ';
             case 'ado': return 'Ⓐ';
             case 'outlook': return '📧';
+            case 'mcp': return '🔌';
         }
     }
 

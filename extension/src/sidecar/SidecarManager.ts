@@ -228,7 +228,10 @@ export class SidecarManager {
         const bundledPlatformPath = path.join(this.context.extensionPath, 'server', runtimeId, execName);
         const bundledPath = path.join(this.context.extensionPath, 'server', execName);
 
-        // For development: debug build path (preferred for debugging)
+        // For development: debug build path without RID (default `dotnet build` in Debug)
+        const devDebugPathNoRid = path.join(this.context.extensionPath, '..', 'server', 'bin', 'Debug', 'net8.0', execName);
+
+        // For development: debug build path with RID subfolder
         const devDebugPath = path.join(this.context.extensionPath, '..', 'server', 'bin', 'Debug', 'net8.0', runtimeId, execName);
 
         // For development: release build path (normal build)
@@ -237,8 +240,12 @@ export class SidecarManager {
         // For development: check parent directory (published output)
         const devPublishPath = path.join(this.context.extensionPath, '..', 'server', 'bin', 'Release', 'net8.0', runtimeId, 'publish', execName);
 
-        // For dev: prefer debug > release > published > bundled (platform-specific) > bundled (generic)
+        // For dev: prefer debug (no-rid) > debug (rid) > release > published > bundled
         const fs = require('fs');
+        if (fs.existsSync(devDebugPathNoRid)) {
+            this.outputChannel.appendLine(`Using debug build (no RID): ${devDebugPathNoRid}`);
+            return devDebugPathNoRid;
+        }
         if (fs.existsSync(devDebugPath)) {
             this.outputChannel.appendLine(`Using debug build: ${devDebugPath}`);
             return devDebugPath;

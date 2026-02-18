@@ -27,7 +27,7 @@ export class AIChatPanel {
     private _messages: ChatMessage[] = [];
     private _isProcessing = false;
     private _sessionId?: string;  // Track AI session for conversation continuity
-    private _currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private _currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private _suggestions: ZeroPromptSuggestion[] = [];
 
     private _onInsertQuery?: (query: string) => void;
@@ -118,7 +118,7 @@ export class AIChatPanel {
         this._panel.reveal(vscode.ViewColumn.Two);
     }
 
-    public async setMode(mode: 'kusto' | 'ado' | 'outlook') {
+    public async setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp') {
         this._currentMode = mode;
         await this._loadSuggestions();
         this._updateView();
@@ -206,6 +206,7 @@ export class AIChatPanel {
             case 'kusto': return 'KQL (Kusto Query Language)';
             case 'ado': return 'WIQL (Azure DevOps Work Items)';
             case 'outlook': return 'OQL (Outlook Queries)';
+            case 'mcp': return 'MCPQL (MCP Queries)';
         }
     }
 
@@ -214,6 +215,7 @@ export class AIChatPanel {
             case 'kusto': return 'Ⓚ';
             case 'ado': return 'Ⓐ';
             case 'outlook': return '📧';
+            case 'mcp': return '🔌';
         }
     }
 

@@ -7,7 +7,7 @@ export class ClusterTreeItem extends vscode.TreeItem {
         public readonly clusterUrl: string,
         public readonly clusterName: string,
         public readonly databases: ClusterInfo[],
-        public readonly clusterType: 'kusto' | 'ado' | 'outlook',
+        public readonly clusterType: 'kusto' | 'ado' | 'outlook' | 'mcp',
         public readonly hasActiveDatabase: boolean = false
     ) {
         super(clusterName, databases.length > 1
@@ -28,7 +28,7 @@ export class ClusterTreeItem extends vscode.TreeItem {
             iconName = 'star-full';
             iconColor = new vscode.ThemeColor('charts.yellow');
         } else {
-            iconName = clusterType === 'kusto' ? 'server' : 'organization';
+            iconName = clusterType === 'kusto' ? 'server' : clusterType === 'mcp' ? 'plug' : 'organization';
         }
 
         this.iconPath = new vscode.ThemeIcon(iconName, iconColor);
@@ -142,12 +142,24 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
 
     private clusters: ClusterInfo[] = [];
     private activeCluster: ClusterInfo | null = null;
-    private currentMode: 'kusto' | 'ado' | 'outlook' = 'kusto';
+    private currentMode: 'kusto' | 'ado' | 'outlook' | 'mcp' = 'kusto';
     private tableCounts: Map<string, number> = new Map(); // key: clusterId or "url|database"
     private tableNames: Map<string, string[]> = new Map(); // key: "url|database"
     private filterText: string = '';
 
+    // MCP tool discovery callbacks
+    private mcpGetServerNames: (() => string[]) | undefined;
+    private mcpGetToolsForServer: ((serverName: string) => { toolName: string; description: string; parameters: { name: string; type: string; description: string; required: boolean }[] }[]) | undefined;
+
     constructor(private client: SidecarClient) {}
+
+    setMcpDiscovery(
+        getServerNames: () => string[],
+        getToolsForServer: (serverName: string) => { toolName: string; description: string; parameters: { name: string; type: string; description: string; required: boolean }[] }[]
+    ): void {
+        this.mcpGetServerNames = getServerNames;
+        this.mcpGetToolsForServer = getToolsForServer;
+    }
 
     setFilter(text: string): void {
         this.filterText = text;
@@ -162,12 +174,12 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
         this._onDidChangeTreeData.fire(undefined);
     }
 
-    setMode(mode: 'kusto' | 'ado' | 'outlook'): void {
+    setMode(mode: 'kusto' | 'ado' | 'outlook' | 'mcp'): void {
         this.currentMode = mode;
         this.refresh();
     }
 
-    getMode(): 'kusto' | 'ado' | 'outlook' {
+    getMode(): 'kusto' | 'ado' | 'outlook' | 'mcp' {
         return this.currentMode;
     }
 
@@ -211,6 +223,11 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
         if (!element) {
             // Root level - show clusters grouped by URL
             try {
+                // MCP mode: show MCP servers from local discovery instead of sidecar clusters
+                if (this.currentMode === 'mcp') {
+                    return this.getMcpRootItems();
+                }
+
                 this.clusters = await this.client.getClusters();
 
                 // Filter clusters based on current mode
@@ -303,6 +320,18 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
             return children;
         }
 
+        // MCP server children: show tools
+        if (element.contextValue === 'mcpServer' && this.mcpGetToolsForServer) {
+            const serverName = element.label as string;
+            const tools = this.mcpGetToolsForServer(serverName);
+            return tools.map(tool => new McpToolTreeItem(
+                serverName,
+                tool.toolName,
+                tool.description,
+                tool.parameters
+            ));
+        }
+
         return [];
     }
 
@@ -312,5 +341,66 @@ export class ClusterTreeProvider implements vscode.TreeDataProvider<vscode.TreeI
         normalized = normalized.replace(/^https?:\/\//, '');
         normalized = normalized.replace(/\/$/, '');
         return normalized;
+    }
+
+    private getMcpRootItems(): vscode.TreeItem[] {
+        if (!this.mcpGetServerNames || !this.mcpGetToolsForServer) {
+            const noConfig = new vscode.TreeItem('No MCP configuration found');
+            noConfig.description = 'Add .vscode/mcp.json to get started';
+            noConfig.iconPath = new vscode.ThemeIcon('info');
+            return [noConfig];
+        }
+
+        const serverNames = this.mcpGetServerNames();
+        if (serverNames.length === 0) {
+            const noServers = new vscode.TreeItem('No MCP servers configured');
+            noServers.description = 'Add servers to .vscode/mcp.json';
+            noServers.iconPath = new vscode.ThemeIcon('info');
+            return [noServers];
+        }
+
+        return serverNames.map(serverName => {
+            const tools = this.mcpGetToolsForServer!(serverName);
+            const item = new vscode.TreeItem(
+                serverName,
+                tools.length > 0
+                    ? vscode.TreeItemCollapsibleState.Expanded
+                    : vscode.TreeItemCollapsibleState.None
+            );
+            item.iconPath = new vscode.ThemeIcon('plug');
+            item.contextValue = 'mcpServer';
+            item.description = `${tools.length} tool${tools.length !== 1 ? 's' : ''}`;
+            item.tooltip = `MCP Server: ${serverName}\n${tools.length} tool(s) available`;
+            return item;
+        });
+    }
+}
+
+// MCP tool tree item for display under MCP servers
+export class McpToolTreeItem extends vscode.TreeItem {
+    constructor(
+        public readonly serverName: string,
+        public readonly toolName: string,
+        public readonly toolDescription: string,
+        public readonly parameters: { name: string; type: string; description: string; required: boolean }[]
+    ) {
+        super(toolName, vscode.TreeItemCollapsibleState.None);
+        this.description = toolDescription;
+        this.iconPath = new vscode.ThemeIcon('symbol-method');
+        this.contextValue = 'mcpTool';
+
+        const paramList = parameters.map(p =>
+            `  ${p.required ? '*' : ' '} ${p.name}: ${p.type} — ${p.description}`
+        ).join('\n');
+        this.tooltip = `${toolName}\n${toolDescription}\n\nParameters:\n${paramList || '  (none)'}`;
+
+        // Insert a query template when clicked
+        const requiredParams = parameters.filter(p => p.required);
+        const paramStr = requiredParams.map(p => `${p.name}='...'`).join(', ');
+        this.command = {
+            command: 'queryStudio.insertText',
+            title: 'Insert Tool Query',
+            arguments: [`${serverName} | ${toolName}(${paramStr})\n`]
+        };
     }
 }

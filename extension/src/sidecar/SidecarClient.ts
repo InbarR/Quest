@@ -14,7 +14,7 @@ export interface ClusterInfo {
     name: string;
     url: string;
     database: string;
-    type: 'kusto' | 'ado' | 'outlook';
+    type: 'kusto' | 'ado' | 'outlook' | 'mcp';
     isFavorite: boolean;
     organization?: string;
 }
@@ -26,7 +26,7 @@ export interface PresetInfo {
     description?: string;  // User description of what this query does
     clusterUrl?: string;
     database?: string;
-    type: 'kusto' | 'ado' | 'outlook';
+    type: 'kusto' | 'ado' | 'outlook' | 'mcp';
     createdAt: string;
     isAutoSaved: boolean;
 }
@@ -35,7 +35,7 @@ export interface QueryRequest {
     query: string;
     clusterUrl: string;
     database: string;
-    type: 'kusto' | 'ado' | 'outlook';
+    type: 'kusto' | 'ado' | 'outlook' | 'mcp';
     timeout?: number;
     maxResults?: number;
 }
@@ -79,7 +79,7 @@ export interface CompletionItem {
 
 export interface AiChatRequest {
     message: string;
-    mode?: 'kusto' | 'ado' | 'outlook';  // Current query mode
+    mode?: 'kusto' | 'ado' | 'outlook' | 'mcp';  // Current query mode
     context?: {
         currentQuery?: string;
         clusterUrl?: string;
@@ -94,6 +94,17 @@ export interface AiChatRequest {
             defaultAreaPath?: string;
             defaultProject?: string;
         };
+        mcpTools?: {
+            serverName: string;
+            toolName: string;
+            description?: string;
+            parameters?: {
+                name: string;
+                type: string;
+                description?: string;
+                required: boolean;
+            }[];
+        }[];
     };
     sessionId?: string;
 }
@@ -116,7 +127,7 @@ export interface ResultHistoryItem {
     success: boolean;
     error?: string;
     createdAt: string;
-    type: 'kusto' | 'ado' | 'outlook';
+    type: 'kusto' | 'ado' | 'outlook' | 'mcp';
     columns?: string[];
     sampleRows?: any[][];
     filePath?: string;
@@ -185,6 +196,21 @@ export interface ExtractDataSourceFromImageRequest {
     imageBase64: string;
     imageMimeType: string;
     mode: 'kusto' | 'ado';
+}
+
+// MCP Types
+export interface McpToolParameter {
+    name: string;
+    type: string;
+    description: string;
+    required: boolean;
+}
+
+export interface McpToolSchema {
+    serverName: string;
+    toolName: string;
+    description: string;
+    parameters: McpToolParameter[];
 }
 
 export interface ExtractedClusterItem {
@@ -465,6 +491,19 @@ export class SidecarClient {
 
     async updateRuleProperty(ruleName: string, property: string, value: string): Promise<RuleOperationResult> {
         return this.sendRequest('outlook/updateRuleProperty', { ruleName, property, value });
+    }
+
+    // MCP
+    async setMcpSchema(tools: McpToolSchema[]): Promise<{ success: boolean }> {
+        return this.sendRequest('mcp/setSchema', { tools });
+    }
+
+    async clearMcpSchema(): Promise<{ success: boolean }> {
+        return this.sendRequest('mcp/clearSchema');
+    }
+
+    async getMcpSchema(): Promise<{ servers: Record<string, { name: string; description: string; parameters: { name: string; type: string; description: string; required: boolean }[] }[]> }> {
+        return this.sendRequest('mcp/getSchema');
     }
 
     /**
