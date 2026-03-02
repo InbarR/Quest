@@ -205,13 +205,6 @@ export class ClipboardImageCapture {
                 document.getElementById('buttons').style.display = 'block';
                 document.querySelector('.paste-area').classList.add('has-image');
                 setStatus('Image ready! Click "Use This Image" or press Enter', '');
-
-                // Auto-submit after a short delay (gives user time to see preview)
-                if (autoSubmitTimeout) clearTimeout(autoSubmitTimeout);
-                autoSubmitTimeout = setTimeout(() => {
-                    log('Auto-submitting image');
-                    submit();
-                }, 1500);
             };
             reader.onerror = (err) => {
                 log('FileReader error: ' + err);

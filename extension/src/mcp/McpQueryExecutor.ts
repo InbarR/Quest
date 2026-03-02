@@ -24,6 +24,7 @@ export interface ParsedMcpQuery {
  */
 export class McpQueryExecutor implements vscode.Disposable {
     private _disposables: vscode.Disposable[] = [];
+    private static _alwaysRun = false;
 
     constructor(private toolDiscovery: McpToolDiscovery) {}
 
@@ -31,9 +32,15 @@ export class McpQueryExecutor implements vscode.Disposable {
      * Check if a query should be handled by MCP (quick check).
      */
     isMcpQuery(query: string): boolean {
-        const trimmed = query.trim();
+        // Strip // line comments before checking
+        const stripped = query.split('\n').map(line => {
+            for (let i = 0; i < line.length - 1; i++) {
+                if (line[i] === '/' && line[i + 1] === '/') { return line.substring(0, i); }
+            }
+            return line;
+        }).join(' ').trim();
         // Pattern: identifier | identifier(...)  or  identifier.identifier(...)
-        return /^\w[\w-]*\s*[|.]\s*\w[\w-]*\s*\(/.test(trimmed);
+        return /^\w[\w-]*\s*[|.]\s*\w[\w-]*\s*\(/.test(stripped);
     }
 
     /**
@@ -41,19 +48,63 @@ export class McpQueryExecutor implements vscode.Disposable {
      * This is a lightweight client-side parse — full parsing happens on the sidecar.
      */
     parseQuery(query: string): ParsedMcpQuery | null {
-        const trimmed = query.trim();
-        
-        // Match: serverName | toolName(params) or serverName.toolName(params)
-        const match = trimmed.match(/^(\w[\w-]*)\s*[|.]\s*(\w[\w-]*)\s*\(([\s\S]*?)\)/);
-        if (!match) {
+        // Strip // line comments (matching server-side StripComments behavior)
+        const stripped = query.split('\n').map(line => {
+            let inString = false;
+            let stringChar = '';
+            for (let i = 0; i < line.length - 1; i++) {
+                if (inString) {
+                    if (line[i] === stringChar && (i === 0 || line[i - 1] !== '\\')) {
+                        inString = false;
+                    }
+                } else {
+                    if (line[i] === "'" || line[i] === '"') {
+                        inString = true;
+                        stringChar = line[i];
+                    } else if (line[i] === '/' && line[i + 1] === '/') {
+                        return line.substring(0, i);
+                    }
+                }
+            }
+            return line;
+        }).join('\n');
+
+        // Normalize: collapse newlines to spaces for regex matching (query may span multiple lines)
+        const trimmed = stripped.trim().replace(/\r?\n/g, ' ');
+
+        // Match: serverName | toolName( or serverName.toolName(
+        const headerMatch = trimmed.match(/^([\w][\w.-]*)\s*[|]\s*([\w][\w.-]*)\s*\(/)
+            || trimmed.match(/^([\w][\w.-]*)\.([\w][\w.-]*)\s*\(/);
+        if (!headerMatch) {
             return null;
         }
 
-        const [, serverName, toolName, paramsStr] = match;
+        const serverName = headerMatch[1];
+        const toolName = headerMatch[2];
+
+        // Find the matching closing parenthesis, respecting nested parens and string literals
+        const paramsStart = headerMatch[0].length;
+        let depth = 1;
+        let inSingleQuote = false;
+        let inDoubleQuote = false;
+        let paramsEnd = -1;
+        for (let i = paramsStart; i < trimmed.length; i++) {
+            const ch = trimmed[i];
+            const prev = i > 0 ? trimmed[i - 1] : '';
+            if (prev === '\\') { continue; }
+            if (ch === "'" && !inDoubleQuote) { inSingleQuote = !inSingleQuote; }
+            else if (ch === '"' && !inSingleQuote) { inDoubleQuote = !inDoubleQuote; }
+            else if (!inSingleQuote && !inDoubleQuote) {
+                if (ch === '(') { depth++; }
+                else if (ch === ')') { depth--; if (depth === 0) { paramsEnd = i; break; } }
+            }
+        }
+        if (paramsEnd === -1) { return null; }
+        const paramsStr = trimmed.substring(paramsStart, paramsEnd);
         const parameters = this.parseParameters(paramsStr);
 
         // Check if there's post-processing after the tool call
-        const afterToolCall = trimmed.substring(match[0].length).trim();
+        const afterToolCall = trimmed.substring(paramsEnd + 1).trim();
         const hasPostProcessing = afterToolCall.startsWith('|');
 
         return {
@@ -76,6 +127,24 @@ export class McpQueryExecutor implements vscode.Disposable {
         if (!vsCodeToolName) {
             throw new Error(`MCP tool not found: ${parsed.serverName}.${parsed.toolName}. ` +
                 `Make sure the MCP server is configured in .vscode/mcp.json and running.`);
+        }
+
+        // Confirm tool invocation with the user (skip if "Always Run" was previously selected)
+        if (!McpQueryExecutor._alwaysRun) {
+            const paramSummary = Object.entries(parsed.parameters)
+                .map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ');
+            const confirm = await vscode.window.showInformationMessage(
+                `Run MCP tool "${parsed.serverName}.${parsed.toolName}"${paramSummary ? ` with ${paramSummary}` : ''}?`,
+                { modal: false },
+                'Run',
+                'Always Run'
+            );
+            if (!confirm) {
+                throw new Error('Tool invocation cancelled by user');
+            }
+            if (confirm === 'Always Run') {
+                McpQueryExecutor._alwaysRun = true;
+            }
         }
 
         // Invoke the tool using VS Code's API
@@ -230,6 +299,12 @@ export class McpQueryExecutor implements vscode.Disposable {
         for (let i = 0; i < input.length; i++) {
             const ch = input[i];
             if (inQuote) {
+                if (ch === '\\' && i + 1 < input.length) {
+                    // Escaped character — include both backslash and next char
+                    current += ch + input[i + 1];
+                    i++;
+                    continue;
+                }
                 current += ch;
                 if (ch === quoteChar) {
                     inQuote = false;

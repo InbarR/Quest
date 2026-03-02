@@ -83,7 +83,12 @@ public class SchemaHandler
         catch (Exception ex)
         {
             _log?.Invoke($"Failed to fetch schema: {ex.Message}");
-            return new FetchSchemaResult(false, 0, ex.Message);
+            var errorMessage = ex.Message;
+            if (errorMessage.Contains("Unauthorized") || errorMessage.Contains("401") || errorMessage.Contains("Forbidden") || errorMessage.Contains("403"))
+            {
+                errorMessage = $"Authentication failed for {clusterUrl}. Try running 'az login' in a terminal, or sign in to the Azure extension in VS Code, then retry.";
+            }
+            return new FetchSchemaResult(false, 0, errorMessage);
         }
     }
 
@@ -91,7 +96,13 @@ public class SchemaHandler
     {
         // Try to get cached schema for this specific cluster/database
         var cached = _schemaManager.GetCachedSchema(clusterUrl, database);
-        var tablesToUse = cached?.Tables ?? _schemaManager.GetConfig().Tables;
+        var tablesToUse = (cached != null && cached.Tables.Count > 0)
+            ? cached.Tables
+            : _schemaManager.GetConfig().Tables;
+        if (tablesToUse == null || tablesToUse.Count == 0)
+        {
+            return new SchemaInfo(Tables: Array.Empty<TableInfo>());
+        }
 
         var tables = tablesToUse
             .Select(t => new TableInfo(

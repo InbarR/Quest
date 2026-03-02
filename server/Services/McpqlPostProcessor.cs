@@ -31,6 +31,7 @@ public class McpqlPostProcessor
             {
                 McpqlWhereOperator w => ApplyWhere(columns, rows, w),
                 McpqlProjectOperator p => ApplyProject(columns, rows, p),
+                McpqlProjectReorderOperator pr => ApplyProjectReorder(columns, rows, pr),
                 McpqlTakeOperator t => ApplyTake(columns, rows, t),
                 McpqlSortOperator s => ApplySort(columns, rows, s),
                 McpqlCountOperator => ApplyCount(columns, rows),
@@ -146,8 +147,13 @@ public class McpqlPostProcessor
 
     private static QueryResult ObjectToQueryResult(JsonElement obj, long executionTimeMs)
     {
-        // Check if the object has array properties that look like the main data
+        // Check if the object is a thin wrapper around a single array-of-objects
         // (common pattern: { "items": [...], "total": 10 })
+        // But do NOT extract arrays from rich data objects that happen to contain
+        // array properties (e.g., an ICM incident with customFields, tags, etc.)
+        int scalarCount = 0;
+        int arrayOfObjectsCount = 0;
+        JsonElement? candidateArray = null;
         foreach (var prop in obj.EnumerateObject())
         {
             if (prop.Value.ValueKind == JsonValueKind.Array && prop.Value.GetArrayLength() > 0)
@@ -155,9 +161,25 @@ public class McpqlPostProcessor
                 var firstItem = prop.Value.EnumerateArray().First();
                 if (firstItem.ValueKind == JsonValueKind.Object)
                 {
-                    return ArrayToQueryResult(prop.Value, executionTimeMs);
+                    arrayOfObjectsCount++;
+                    candidateArray = prop.Value;
+                }
+                else
+                {
+                    scalarCount++;
                 }
             }
+            else
+            {
+                scalarCount++;
+            }
+        }
+
+        // Only extract inner array if this looks like a wrapper object:
+        // few non-array properties alongside a single array-of-objects
+        if (arrayOfObjectsCount == 1 && scalarCount <= 3 && candidateArray != null)
+        {
+            return ArrayToQueryResult(candidateArray.Value, executionTimeMs);
         }
 
         // Single object → one row with property names as columns
@@ -208,18 +230,32 @@ public class McpqlPostProcessor
     {
         var filtered = rows.Where(row =>
         {
-            return where.Conditions.All(condition =>
+            bool result = true;
+            for (int i = 0; i < where.Conditions.Count; i++)
             {
+                var condition = where.Conditions[i];
                 var colIndex = columns.IndexOf(condition.Column);
                 // Try case-insensitive match
                 if (colIndex < 0)
                     colIndex = columns.FindIndex(c => c.Equals(condition.Column, System.StringComparison.OrdinalIgnoreCase));
-                if (colIndex < 0 || colIndex >= row.Count)
-                    return false;
 
-                var cellValue = row[colIndex];
-                return EvaluateCondition(cellValue, condition.Operator, condition.Value);
-            });
+                bool match = colIndex >= 0 && colIndex < row.Count &&
+                    EvaluateCondition(row[colIndex], condition.Operator, condition.Value);
+
+                if (i == 0)
+                {
+                    result = match;
+                }
+                else if (condition.LogicalOperator == "or")
+                {
+                    result = result || match;
+                }
+                else // "and" or default
+                {
+                    result = result && match;
+                }
+            }
+            return result;
         }).ToList();
 
         return (columns, filtered);
@@ -239,6 +275,30 @@ public class McpqlPostProcessor
         var newColumns = indices.Select(x => columns[x.Index]).ToList();
         var newRows = rows.Select(row =>
             indices.Select(x => x.Index < row.Count ? row[x.Index] : "").ToList()
+        ).ToList();
+
+        return (newColumns, newRows);
+    }
+
+    private (List<string>, List<List<string>>) ApplyProjectReorder(
+        List<string> columns, List<List<string>> rows, McpqlProjectReorderOperator reorder)
+    {
+        // Move specified columns to front, keep remaining columns in original order
+        var frontIndices = reorder.Columns.Select(col =>
+        {
+            var idx = columns.IndexOf(col);
+            if (idx < 0)
+                idx = columns.FindIndex(c => c.Equals(col, System.StringComparison.OrdinalIgnoreCase));
+            return idx;
+        }).Where(idx => idx >= 0).ToList();
+
+        var frontSet = new HashSet<int>(frontIndices);
+        var restIndices = Enumerable.Range(0, columns.Count).Where(i => !frontSet.Contains(i)).ToList();
+        var orderedIndices = frontIndices.Concat(restIndices).ToList();
+
+        var newColumns = orderedIndices.Select(i => columns[i]).ToList();
+        var newRows = rows.Select(row =>
+            orderedIndices.Select(i => i < row.Count ? row[i] : "").ToList()
         ).ToList();
 
         return (newColumns, newRows);

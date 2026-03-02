@@ -28,7 +28,6 @@ public class PresetHandler
             .Where(p => !p.AutoSaved)
             .Select(p => ToPresetInfo(p, _log))
             .ToArray();
-        _log?.Invoke($"GetPresets returning {presets.Length} presets");
         return presets;
     }
 
@@ -41,7 +40,6 @@ public class PresetHandler
             .Take(limit)
             .Select(p => ToPresetInfo(p, _log))
             .ToArray();
-        _log?.Invoke($"GetHistory returning {history.Length} items");
         return history;
     }
 

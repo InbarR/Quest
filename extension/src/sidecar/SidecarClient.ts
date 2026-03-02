@@ -284,7 +284,7 @@ export class SidecarClient {
         return new Promise((resolve, reject) => {
             // Check if stream is still writable
             if (!this.stdin || this.stdin.destroyed || !this.stdin.writable) {
-                reject(new Error('Server connection lost. Please reload VS Code.'));
+                reject(new Error('Server connection lost. Reconnecting...'));
                 return;
             }
 
@@ -504,6 +504,10 @@ export class SidecarClient {
 
     async getMcpSchema(): Promise<{ servers: Record<string, { name: string; description: string; parameters: { name: string; type: string; description: string; required: boolean }[] }[]> }> {
         return this.sendRequest('mcp/getSchema');
+    }
+
+    async createRule(name: string, enabled: boolean, properties: RulePropertyInfo[]): Promise<RuleOperationResult> {
+        return this.sendRequest('outlook/createRule', { name, enabled, properties });
     }
 
     /**

@@ -12,9 +12,14 @@ import { McpQueryExecutor } from '../mcp/McpQueryExecutor';
 import { McpToolDiscovery } from '../mcp/McpToolDiscovery';
 
 let mcpToolDiscoveryInstance: McpToolDiscovery | undefined;
+let clientGetter: (() => SidecarClient) | undefined;
 
 export function setMcpToolDiscovery(discovery: McpToolDiscovery) {
     mcpToolDiscoveryInstance = discovery;
+}
+
+export function setSidecarClientGetter(getter: () => SidecarClient) {
+    clientGetter = getter;
 }
 
 /**
@@ -259,6 +264,19 @@ export function registerQueryCommands(
     clusterProvider?: ClusterTreeProvider,
     resultsHistoryProvider?: ResultsHistoryWebViewProvider
 ) {
+    // Wrap client access to survive reconnects: if a dynamic getter is set, use it
+    // to always get the current client (after reconnect the old reference is dead)
+    const _originalClient = client;
+    const liveClient = { get current(): SidecarClient { return clientGetter ? clientGetter() : _originalClient; } };
+    // Reassign 'client' so all existing code uses the live reference
+    client = new Proxy(_originalClient, {
+        get(target, prop, receiver) {
+            const current = liveClient.current;
+            const value = Reflect.get(current, prop, receiver);
+            return typeof value === 'function' ? value.bind(current) : value;
+        }
+    }) as SidecarClient;
+
     // Store context for profile management
     extensionContext = context;
     loadConnectionProfiles();
@@ -473,11 +491,11 @@ export function registerQueryCommands(
                 return;
             }
 
-            // Determine query type: current mode takes priority over file language
+            // Determine query type: current mode takes priority, then file language, then content detection
             const langId = editor.document.languageId;
             const currentMode = getCurrentMode();
             outputChannel.appendLine(`DEBUG: currentMode=${currentMode}, activeQueryType=${activeQueryType}, langId=${langId}`);
-            const queryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = currentMode === 'mcp' ? 'mcp'
+            let queryType: 'kusto' | 'ado' | 'outlook' | 'mcp' = currentMode === 'mcp' ? 'mcp'
                 : currentMode === 'outlook' ? 'outlook'
                 : currentMode === 'ado' ? 'ado'
                 : currentMode === 'kusto' ? 'kusto'
@@ -485,6 +503,14 @@ export function registerQueryCommands(
                 : langId === 'oql' ? 'outlook'
                 : langId === 'wiql' ? 'ado'
                 : 'kusto';
+            // Auto-detect MCPQL content even when not in MCP mode
+            if (queryType === 'kusto' && mcpToolDiscoveryInstance) {
+                const mcpDetector = new McpQueryExecutor(mcpToolDiscoveryInstance);
+                if (mcpDetector.isMcpQuery(query)) {
+                    queryType = 'mcp';
+                    outputChannel.appendLine(`Auto-detected MCPQL query content`);
+                }
+            }
             outputChannel.appendLine(`Language: ${langId}, Current mode: ${currentMode}, Using: ${queryType}`);
 
             // Check for active connection (not needed for Outlook or MCP)
@@ -560,9 +586,10 @@ export function registerQueryCommands(
                                     throw new Error('MCP tool discovery not initialized');
                                 }
                                 const mcpExecutor = new McpQueryExecutor(mcpToolDiscoveryInstance);
+                                outputChannel.appendLine(`MCP client-side parsing: "${currentQuery.replace(/\r?\n/g, '\\n').substring(0, 150)}"`);
                                 const parsed = mcpExecutor.parseQuery(currentQuery);
                                 if (!parsed) {
-                                    throw new Error('Failed to parse MCPQL query');
+                                    throw new Error(`Failed to parse MCPQL query on client side: "${currentQuery.replace(/\r?\n/g, '\\n').substring(0, 150)}"`);
                                 }
                                 const rawJson = await mcpExecutor.executeTool(parsed);
                                 outputChannel.appendLine(`MCP tool returned ${rawJson.length} chars of JSON`);
@@ -773,9 +800,10 @@ export function registerQueryCommands(
                                     throw new Error('MCP tool discovery not initialized');
                                 }
                                 const mcpExecutor = new McpQueryExecutor(mcpToolDiscoveryInstance);
+                                outputChannel.appendLine(`MCP client-side parsing: "${currentQuery.replace(/\r?\n/g, '\\n').substring(0, 150)}"`);
                                 const parsed = mcpExecutor.parseQuery(currentQuery);
                                 if (!parsed) {
-                                    throw new Error('Failed to parse MCPQL query');
+                                    throw new Error(`Failed to parse MCPQL query on client side: "${currentQuery.replace(/\r?\n/g, '\\n').substring(0, 150)}"`);
                                 }
                                 const rawJson = await mcpExecutor.executeTool(parsed);
                                 const mcpRequest: QueryRequest = {
@@ -1170,6 +1198,10 @@ export function registerQueryCommands(
                 // Outlook presets don't need cluster/database
                 outputChannel.appendLine(`Loaded Outlook preset: ${preset.name}`);
                 setActiveConnection('', '', 'outlook');
+            } else if (preset.type === 'mcp') {
+                // MCP presets don't need cluster/database
+                outputChannel.appendLine(`Loaded MCP preset: ${preset.name}`);
+                setActiveConnection('', '', 'mcp');
             } else {
                 // No cluster info in preset - warn user (only for kusto/ado)
                 outputChannel.appendLine(`Preset has no cluster/database info`);
@@ -1438,6 +1470,125 @@ export function registerQueryCommands(
             vscode.window.showErrorMessage(`Failed to open in Outlook: ${message}`);
         }
     });
+
+    // Export mail rule to JSON
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.exportRule', async () => {
+            try {
+                // Get list of rules by running a query
+                const rulesResult = await client.executeQuery({
+                    query: 'Rules | project Name',
+                    clusterUrl: '',
+                    database: '',
+                    type: 'outlook',
+                    timeout: 30,
+                    maxResults: 500
+                });
+
+                if (!rulesResult.success || rulesResult.rows.length === 0) {
+                    vscode.window.showWarningMessage('No Outlook rules found.');
+                    return;
+                }
+
+                const ruleNames = rulesResult.rows.map(r => r[0]);
+                const selected = await vscode.window.showQuickPick(ruleNames, {
+                    placeHolder: 'Select a rule to export'
+                });
+                if (!selected) { return; }
+
+                outputChannel.appendLine(`Exporting rule: "${selected}"`);
+                const details = await client.getRuleDetails(selected);
+                if (!details.success) {
+                    vscode.window.showErrorMessage(`Failed to get rule details: ${details.error}`);
+                    return;
+                }
+
+                const uri = await vscode.window.showSaveDialog({
+                    defaultUri: vscode.Uri.file(path.join(os.homedir(), `${selected.replace(/[^a-zA-Z0-9]/g, '_')}.rule.json`)),
+                    filters: { 'Rule JSON': ['json'] }
+                });
+                if (!uri) { return; }
+
+                const json = JSON.stringify(details, null, 2);
+                await vscode.workspace.fs.writeFile(uri, Buffer.from(json, 'utf-8'));
+                vscode.window.showInformationMessage(`Rule "${selected}" exported to ${path.basename(uri.fsPath)}`);
+                outputChannel.appendLine(`Rule exported to ${uri.fsPath}`);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                outputChannel.appendLine(`Failed to export rule: ${message}`);
+                vscode.window.showErrorMessage(`Failed to export rule: ${message}`);
+            }
+        })
+    );
+
+    // Import mail rule from JSON
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.importRule', async () => {
+            try {
+                const uris = await vscode.window.showOpenDialog({
+                    canSelectMany: false,
+                    filters: { 'Rule JSON': ['json'] },
+                    openLabel: 'Import Rule'
+                });
+                if (!uris || uris.length === 0) { return; }
+
+                const content = await vscode.workspace.fs.readFile(uris[0]);
+                const template = JSON.parse(Buffer.from(content).toString('utf-8'));
+
+                if (!template.name || !Array.isArray(template.properties)) {
+                    vscode.window.showErrorMessage('Invalid rule file: missing name or properties.');
+                    return;
+                }
+
+                // Prompt for rule name
+                const newName = await vscode.window.showInputBox({
+                    prompt: 'Name for the new rule',
+                    value: `${template.name} (copy)`,
+                    validateInput: v => v.trim() ? null : 'Name cannot be empty'
+                });
+                if (!newName) { return; }
+
+                // Let user edit each editable property
+                const properties: RulePropertyInfo[] = [];
+                for (const prop of template.properties as RulePropertyInfo[]) {
+                    if (!prop.editable) {
+                        properties.push(prop);
+                        continue;
+                    }
+
+                    if (prop.type === 'toggle') {
+                        const choice = await vscode.window.showQuickPick(
+                            ['Enabled', 'Disabled'],
+                            { placeHolder: `${prop.name} (currently ${prop.value === 'true' ? 'Enabled' : 'Disabled'})` }
+                        );
+                        if (choice === undefined) { return; } // cancelled
+                        properties.push({ ...prop, value: choice === 'Enabled' ? 'true' : 'false' });
+                    } else {
+                        const newValue = await vscode.window.showInputBox({
+                            prompt: `${prop.name} (${prop.category})`,
+                            value: prop.value,
+                            placeHolder: `Enter value for ${prop.name}`
+                        });
+                        if (newValue === undefined) { return; } // cancelled
+                        properties.push({ ...prop, value: newValue });
+                    }
+                }
+
+                outputChannel.appendLine(`Importing rule: "${newName}" with ${properties.length} properties`);
+                const result = await client.createRule(newName, template.enabled ?? true, properties);
+                if (result.success) {
+                    vscode.window.showInformationMessage(`Rule "${newName}" created successfully!`);
+                    outputChannel.appendLine(`Rule "${newName}" imported successfully`);
+                } else {
+                    vscode.window.showErrorMessage(`Failed to create rule: ${result.error}`);
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                outputChannel.appendLine(`Failed to import rule: ${message}`);
+                vscode.window.showErrorMessage(`Failed to import rule: ${message}`);
+            }
+        })
+    );
 }
 
 /**

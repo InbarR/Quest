@@ -877,16 +877,40 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 // Interactive server/tool selection if no scope is pre-selected
                 if (allMcpTools && allMcpTools.length > 0) {
                     if (!this._selectedMcpServer) {
-                        // First message in MCP mode — guide user through selection
-                        const filtered = await this._selectMcpScope(allMcpTools);
-                        if (!filtered) {
-                            // User cancelled — abort the message
-                            this._messages.pop(); // Remove the user message we already pushed
-                            return;
+                        // Auto-detect server from user message before showing picker
+                        const serverNames = [...new Set(allMcpTools.map(t => t.serverName))];
+                        const textLower = text.toLowerCase();
+                        const detectedServer = serverNames.find(s => textLower.includes(s.toLowerCase()));
+                        if (detectedServer) {
+                            this._selectedMcpServer = detectedServer;
+                            this._selectedMcpTool = undefined;
+                            this._updateMcpContextChips();
+                            this.outputChannel.appendLine(`[AI Chat] Auto-detected MCP server from message: ${detectedServer}`);
+                            const filtered = allMcpTools.filter(t => t.serverName === detectedServer);
+                            mcpTools = filtered.length > 0 ? filtered : allMcpTools;
+                        } else {
+                            // No server mentioned — guide user through selection
+                            const filtered = await this._selectMcpScope(allMcpTools);
+                            if (!filtered) {
+                                // User cancelled — abort the message
+                                this._messages.pop(); // Remove the user message we already pushed
+                                return;
+                            }
+                            mcpTools = filtered;
                         }
-                        mcpTools = filtered;
                     } else {
-                        // Server already selected — apply filter
+                        // Check if the user's message mentions a different server — auto-switch
+                        const serverNames = [...new Set(allMcpTools.map(t => t.serverName))];
+                        const textLower = text.toLowerCase();
+                        const mentionedServer = serverNames.find(s => textLower.includes(s.toLowerCase()));
+                        if (mentionedServer && mentionedServer !== this._selectedMcpServer) {
+                            this._selectedMcpServer = mentionedServer;
+                            this._selectedMcpTool = undefined;
+                            this._updateMcpContextChips();
+                            this.outputChannel.appendLine(`[AI Chat] Auto-switched MCP server to: ${mentionedServer}`);
+                        }
+
+                        // Server selected — apply filter
                         let filtered = allMcpTools.filter(t => t.serverName === this._selectedMcpServer);
                         if (this._selectedMcpTool) {
                             filtered = filtered.filter(t => t.toolName === this._selectedMcpTool);
@@ -1010,13 +1034,22 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
             this.outputChannel.appendLine(`[AI Chat] Error: ${errorMsg}`);
-            this.outputChannel.show(true);
 
-            this._messages.push({
-                role: 'assistant',
-                content: `Sorry, I encountered an error: ${errorMsg}\n\nCheck the Output panel (Quest) for more details.`,
-                timestamp: new Date().toLocaleTimeString()
-            });
+            // If connection lost, wait for reconnection and suggest retry
+            if (errorMsg.includes('connection lost') || errorMsg.includes('connection error')) {
+                this._messages.push({
+                    role: 'assistant',
+                    content: `Connection to Quest server was lost. The server is reconnecting — please try again in a moment.`,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+            } else {
+                this.outputChannel.show(true);
+                this._messages.push({
+                    role: 'assistant',
+                    content: `Sorry, I encountered an error: ${errorMsg}\n\nCheck the Output panel (Quest) for more details.`,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+            }
         } finally {
             this._isProcessing = false;
             this._view?.webview.postMessage({ command: 'setTyping', isTyping: false });

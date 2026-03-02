@@ -8,7 +8,7 @@ import { ResultsHistoryWebViewProvider } from './providers/ResultsHistoryWebView
 import { SnippetsWebViewProvider } from './providers/SnippetsWebViewProvider';
 import { AIChatViewProvider } from './providers/AIChatViewProvider';
 import { FeedbackPanel } from './providers/FeedbackPanel';
-import { registerQueryCommands, resetActiveConnection, setActiveQueryType, setMcpToolDiscovery } from './commands/queryCommands';
+import { registerQueryCommands, resetActiveConnection, setActiveQueryType, setMcpToolDiscovery, setSidecarClientGetter } from './commands/queryCommands';
 import { registerClusterCommands } from './commands/clusterCommands';
 import { registerAiCommands } from './commands/aiCommands';
 import { registerKqlLanguage } from './languages/kql/kqlLanguage';
@@ -17,6 +17,7 @@ import { registerOqlLanguage } from './languages/oql/oqlLanguage';
 import { registerMcpqlLanguage } from './languages/mcpql/mcpqlLanguage';
 import { McpConfigLoader } from './mcp/McpConfigLoader';
 import { McpToolDiscovery } from './mcp/McpToolDiscovery';
+import { registerChatParticipant } from './chat/questChatParticipant';
 import { parseData, isValidTableData } from './utils/dataParser';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -428,6 +429,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register commands (fast, no I/O)
     registerQueryCommands(context, sidecar.client, resultsProvider, outputChannel, clusterProvider, resultsHistoryProvider);
+    setSidecarClientGetter(() => sidecar.client);
     registerClusterCommands(context, sidecar.client, clusterProvider, (cluster) => {
         // Update AI chat with the new active cluster
         aiChatProvider.setActiveCluster(cluster.url, cluster.database, cluster.name, cluster.type);
@@ -452,9 +454,17 @@ export async function activate(context: vscode.ExtensionContext) {
     // Wire MCP discovery into cluster tree provider and query commands
     clusterProvider.setMcpDiscovery(
         () => mcpToolDiscovery.getServerNames(),
-        (serverName: string) => mcpToolDiscovery.getToolsForServer(serverName)
+        (serverName: string) => mcpToolDiscovery.getToolsForServer(serverName),
+        (serverName: string) => mcpToolDiscovery.getServerStatus(serverName)
     );
     setMcpToolDiscovery(mcpToolDiscovery);
+
+    // Refresh tree view when MCP server statuses change
+    mcpToolDiscovery.onServerStatusChanged(() => {
+        if (currentMode === 'mcp') {
+            clusterProvider.refresh();
+        }
+    });
 
     // Wire MCP discovery into AI chat provider
     aiChatProvider.setMcpToolDiscovery(mcpToolDiscovery);
@@ -544,6 +554,76 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // Helper: find the config-based server name for a discovered server name.
+    // Config may use hyphens (pylance-mcp) while discovery infers underscores (pylance_mcp).
+    const findConfigServerName = (displayName: string): string => {
+        const configNames = mcpConfigLoader.serverNames;
+        // Exact match
+        if (configNames.includes(displayName)) { return displayName; }
+        // Try hyphen/underscore variants
+        const normalized = displayName.replace(/_/g, '-');
+        const found = configNames.find(c => c === normalized || c.replace(/-/g, '_') === displayName);
+        return found || displayName;
+    };
+
+    // Helper: execute a VS Code MCP action (start/stop/restart) on a specific server.
+    const execMcpAction = async (action: 'start' | 'stop' | 'restart', serverName: string) => {
+        const configName = findConfigServerName(serverName);
+        outputChannel.appendLine(`[MCP] ${action} server: ${serverName} (config: ${configName})`);
+
+        const allCommands = await vscode.commands.getCommands(true);
+        // Try the specific action command with server name as argument
+        const actionCmd = allCommands.find(c => c === `workbench.mcp.${action}Server`);
+        if (actionCmd) {
+            // Try passing config name as argument — VS Code may accept it to skip the picker
+            try {
+                await vscode.commands.executeCommand(actionCmd, { id: configName });
+                outputChannel.appendLine(`[MCP] Executed ${actionCmd} with id=${configName}`);
+            } catch {
+                // Fallback: execute without argument (shows picker)
+                await vscode.commands.executeCommand(actionCmd);
+                outputChannel.appendLine(`[MCP] Executed ${actionCmd} (picker shown)`);
+            }
+        } else {
+            // No specific command — open command palette with MCP filter
+            outputChannel.appendLine(`[MCP] No ${action} command found, opening command palette`);
+            await vscode.commands.executeCommand('workbench.action.quickOpen', '>MCP');
+            return;
+        }
+
+        // Refresh after action to update status
+        setTimeout(async () => {
+            await mcpToolDiscovery.manualRefresh();
+            const payload = mcpToolDiscovery.toSchemaPayload();
+            if (payload.length > 0) {
+                try { await sidecar.client.setMcpSchema(payload); } catch {}
+            }
+            if (currentMode === 'mcp') { clusterProvider.refresh(); }
+        }, 3000);
+    };
+
+    // Register MCP server start/stop/restart commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('queryStudio.startMcpServer', async (item?: vscode.TreeItem) => {
+            const serverName = item?.label?.toString();
+            if (!serverName) { return; }
+            await execMcpAction('start', serverName);
+        }),
+        vscode.commands.registerCommand('queryStudio.stopMcpServer', async (item?: vscode.TreeItem) => {
+            const serverName = item?.label?.toString();
+            if (!serverName) { return; }
+            await execMcpAction('stop', serverName);
+        }),
+        vscode.commands.registerCommand('queryStudio.restartMcpServer', async (item?: vscode.TreeItem) => {
+            const serverName = item?.label?.toString();
+            if (!serverName) { return; }
+            await execMcpAction('restart', serverName);
+        })
+    );
+
+    // Register @quest chat participant for GitHub Copilot integration
+    registerChatParticipant(context, sidecar, resultsProvider, outputChannel);
 
     // Register all commands immediately (don't block on sidecar)
     // Commands will handle not-ready state gracefully

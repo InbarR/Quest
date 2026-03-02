@@ -2004,6 +2004,51 @@ public class OutlookService : IDisposable
         }
     }
 
+    public RuleOperationResult CreateRuleFromTemplate(string name, bool enabled, RulePropertyInfo[] properties)
+    {
+        if (string.IsNullOrEmpty(name))
+            return new RuleOperationResult { Success = false, Error = "Rule name is empty" };
+
+        Connect();
+
+        Rules? rules = null;
+        Rule? newRule = null;
+        try
+        {
+            rules = _namespace!.DefaultStore.GetRules();
+            newRule = rules.Create(name, OlRuleType.olRuleReceive);
+
+            // Apply each editable property from the template
+            foreach (var prop in properties)
+            {
+                if (!prop.Editable) continue;
+                try
+                {
+                    ApplyRulePropertyUpdate(newRule, prop.Key, prop.Value);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Invoke($"Warning: could not apply property '{prop.Key}': {ex.Message}");
+                }
+            }
+
+            newRule.Enabled = enabled;
+            rules.Save();
+            _log?.Invoke($"Created rule '{name}' from template with {properties.Length} properties");
+            return new RuleOperationResult { Success = true };
+        }
+        catch (Exception ex)
+        {
+            _log?.Invoke($"Error creating rule from template: {ex.Message}");
+            return new RuleOperationResult { Success = false, Error = ex.Message };
+        }
+        finally
+        {
+            if (newRule != null) Marshal.ReleaseComObject(newRule);
+            if (rules != null) Marshal.ReleaseComObject(rules);
+        }
+    }
+
     private void ApplyRulePropertyUpdate(Rule rule, string property, string value)
     {
         var parts = property.Split('.');

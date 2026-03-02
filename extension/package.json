@@ -2,7 +2,7 @@
   "name": "quest",
   "displayName": "Quest - Query Studio",
   "description": "Quest - Query Azure Data Explorer (Kusto), Azure DevOps (WIQL), and Outlook with AI assistance",
-  "version": "0.6.3",
+  "version": "0.7.1",
   "publisher": "inbar-rotem",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -15,7 +15,7 @@
     "url": "https://github.com/InbarR/Quest/issues"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Data Science",
@@ -47,7 +47,8 @@
     "onCommand:queryStudio.newWiqlFile",
     "onCommand:queryStudio.newOqlFile",
     "onCommand:queryStudio.newMcpqlFile",
-    "onUri"
+    "onUri",
+    "onChatParticipant:quest.chat"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -313,6 +314,24 @@
         "category": "Quest"
       },
       {
+        "command": "queryStudio.startMcpServer",
+        "title": "Start Server",
+        "icon": "$(play)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.stopMcpServer",
+        "title": "Stop Server",
+        "icon": "$(debug-stop)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.restartMcpServer",
+        "title": "Restart Server",
+        "icon": "$(debug-restart)",
+        "category": "Quest"
+      },
+      {
         "command": "queryStudio.setActiveCluster",
         "title": "Set as Active",
         "icon": "$(check)",
@@ -570,6 +589,18 @@
         "command": "queryStudio.viewExternalData",
         "title": "View Data as Table",
         "icon": "$(table)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.exportRule",
+        "title": "Export Mail Rule",
+        "icon": "$(export)",
+        "category": "Quest"
+      },
+      {
+        "command": "queryStudio.importRule",
+        "title": "Import Mail Rule",
+        "icon": "$(import)",
         "category": "Quest"
       }
     ],
@@ -886,6 +917,26 @@
           "group": "1_actions@2"
         },
         {
+          "command": "queryStudio.startMcpServer",
+          "when": "view == querystudio.clusters && viewItem == mcpServerStopped",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "queryStudio.stopMcpServer",
+          "when": "view == querystudio.clusters && viewItem == mcpServerRunning",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "queryStudio.restartMcpServer",
+          "when": "view == querystudio.clusters && viewItem == mcpServerRunning",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "queryStudio.refreshMcpTools",
+          "when": "view == querystudio.clusters && viewItem =~ /^mcpServer/",
+          "group": "1_actions@3"
+        },
+        {
           "command": "queryStudio.loadPreset",
           "when": "view == querystudio.presets && viewItem == preset",
           "group": "inline"
@@ -1035,6 +1086,33 @@
         }
       }
     },
+    "chatParticipants": [
+      {
+        "id": "quest.chat",
+        "fullName": "Quest",
+        "name": "quest",
+        "description": "Run queries, inspect schema, and check connection state",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "ask",
+            "description": "Describe what you want in plain English and Quest will generate and run the query"
+          },
+          {
+            "name": "query",
+            "description": "Run a KQL, WIQL, or OQL query and return results as a markdown table"
+          },
+          {
+            "name": "schema",
+            "description": "Show schema (tables and columns) for the active database"
+          },
+          {
+            "name": "status",
+            "description": "Show current connection state: mode, cluster, database, server health"
+          }
+        ]
+      }
+    ],
     "walkthroughs": [
       {
         "id": "queryStudio.welcome",
@@ -1124,7 +1202,7 @@
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@vscode/test-electron": "^2.5.2",

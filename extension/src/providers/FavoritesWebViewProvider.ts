@@ -70,7 +70,7 @@ export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
             this._presets = await this._client.getPresets();
             // Filter by: not auto-saved AND matches current mode
             this._presets = this._presets.filter(p =>
-                !p.isAutoSaved && p.type === this._currentMode
+                !p.isAutoSaved && (p.type || 'kusto') === this._currentMode
             );
             this._view.webview.postMessage({
                 command: 'update',

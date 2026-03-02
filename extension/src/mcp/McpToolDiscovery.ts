@@ -19,6 +19,8 @@ export interface McpToolParam {
     required: boolean;
 }
 
+export type McpServerStatus = 'running' | 'stopped' | 'starting';
+
 /**
  * Discovers MCP tools available in the workspace using VS Code's Language Model Tools API.
  * Maps discovered tools to server names from the MCP config.
@@ -29,14 +31,19 @@ export class McpToolDiscovery implements vscode.Disposable {
     private _disposables: vscode.Disposable[] = [];
     private _onToolsChanged = new vscode.EventEmitter<McpToolInfo[]>();
     public readonly onToolsChanged = this._onToolsChanged.event;
+    private _onServerStatusChanged = new vscode.EventEmitter<void>();
+    public readonly onServerStatusChanged = this._onServerStatusChanged.event;
     private _sidecarClient?: SidecarClient;
     private _retryTimer?: ReturnType<typeof setTimeout>;
     private _retryCount = 0;
+    private _isRetrying = false;
     private static readonly MAX_RETRIES = 18; // Retry for ~3 minutes (MCP servers can be slow to start)
     private static readonly RETRY_INTERVAL_MS = 10_000; // 10 seconds
+    private _previousStatuses = new Map<string, McpServerStatus>();
 
     constructor(private configLoader: McpConfigLoader) {
         this._disposables.push(this._onToolsChanged);
+        this._disposables.push(this._onServerStatusChanged);
 
         // Re-discover when config changes
         this._disposables.push(
@@ -68,6 +75,7 @@ export class McpToolDiscovery implements vscode.Disposable {
      */
     startPeriodicDiscovery(): void {
         this._retryCount = 0;
+        this._isRetrying = true;
         this._scheduleRetry();
     }
 
@@ -76,6 +84,8 @@ export class McpToolDiscovery implements vscode.Disposable {
             clearTimeout(this._retryTimer);
         }
         if (this._retryCount >= McpToolDiscovery.MAX_RETRIES) {
+            this._isRetrying = false;
+            this._fireStatusChangeIfNeeded();
             return;
         }
         this._retryTimer = setTimeout(async () => {
@@ -89,6 +99,9 @@ export class McpToolDiscovery implements vscode.Disposable {
             // Keep retrying if no tools found yet
             if (this._tools.length === 0 && this._retryCount < McpToolDiscovery.MAX_RETRIES) {
                 this._scheduleRetry();
+            } else {
+                this._isRetrying = false;
+                this._fireStatusChangeIfNeeded();
             }
         }, McpToolDiscovery.RETRY_INTERVAL_MS);
     }
@@ -101,10 +114,15 @@ export class McpToolDiscovery implements vscode.Disposable {
     async manualRefresh(): Promise<McpToolInfo[]> {
         console.log('[McpToolDiscovery] Manual refresh triggered');
         this._retryCount = 0;
+        this._isRetrying = true;
+        this._fireStatusChangeIfNeeded();
         const tools = await this.discoverTools();
         // If still no tools, restart periodic discovery to keep trying
         if (tools.length === 0) {
             this._scheduleRetry();
+        } else {
+            this._isRetrying = false;
+            this._fireStatusChangeIfNeeded();
         }
         return tools;
     }
@@ -117,11 +135,39 @@ export class McpToolDiscovery implements vscode.Disposable {
     }
 
     /**
-     * Get all known MCP server names (from discovered tools only — not config, since
-     * config names may not match VS Code's internal MCP server names).
+     * Get all known MCP server names — union of configured servers and discovered servers.
+     * This ensures stopped/starting servers appear in the tree view.
      */
     getServerNames(): string[] {
-        return [...new Set(this._tools.map(t => t.serverName))];
+        const discovered = new Set(this._tools.map(t => t.serverName));
+        const configured = this.configLoader.serverNames;
+        for (const name of configured) {
+            discovered.add(name);
+        }
+        return [...discovered];
+    }
+
+    /**
+     * Get configured server names only.
+     */
+    getConfiguredServerNames(): string[] {
+        return this.configLoader.serverNames;
+    }
+
+    /**
+     * Get the status of a specific MCP server.
+     */
+    getServerStatus(serverName: string): McpServerStatus {
+        const hasRealTools = this._tools.some(
+            t => t.serverName === serverName && !t.description.startsWith('[stub]')
+        );
+        if (hasRealTools) {
+            return 'running';
+        }
+        if (this._isRetrying) {
+            return 'starting';
+        }
+        return 'stopped';
     }
 
     /**
@@ -208,28 +254,58 @@ export class McpToolDiscovery implements vscode.Disposable {
                 }
             }
 
-            // Only update cache if we got REAL results, or if cache was empty.
-            // Never downgrade from real tools to stubs.
+            // Update cache: accept new tools if they contain real (non-stub) results,
+            // or if the cache was empty/stubs-only. When vscode.lm.tools returns real tools
+            // for some servers but not others, trust it as the source of truth — missing
+            // servers are stopped/removed.
             if (newTools.length > 0) {
-                const currentHasRealTools = this._tools.some(t => !t.description.startsWith('[stub]'));
                 const newHasRealTools = newTools.some(t => !t.description.startsWith('[stub]'));
+                const currentHasRealTools = this._tools.some(t => !t.description.startsWith('[stub]'));
 
-                // Upgrade: stubs → real tools (always accept)
-                // Same level: accept if different
-                // Downgrade: real → stubs (reject, keep cached)
                 if (newHasRealTools || !currentHasRealTools) {
                     if (newTools.length !== this._tools.length || !this._toolsEqual(newTools, this._tools)) {
                         this._tools = newTools;
                         this._onToolsChanged.fire(this._tools);
                     }
                 }
+            } else if (this._tools.length > 0) {
+                // All sources returned empty — servers may have stopped. Clear cache.
+                this._tools = [];
+                this._onToolsChanged.fire(this._tools);
             }
-            // If newTools is empty but we have cached tools, keep the cache
 
+            this._fireStatusChangeIfNeeded();
             return this._tools;
         } catch (err) {
             console.error('MCP tool discovery failed:', err);
             return this._tools; // Return cached tools on error instead of empty
+        }
+    }
+
+    /**
+     * Fire server status change event if any server's status changed.
+     */
+    private _fireStatusChangeIfNeeded(): void {
+        const allServers = this.getServerNames();
+        let changed = false;
+        for (const server of allServers) {
+            const status = this.getServerStatus(server);
+            if (this._previousStatuses.get(server) !== status) {
+                changed = true;
+            }
+        }
+        // Also check if a server was removed
+        for (const server of this._previousStatuses.keys()) {
+            if (!allServers.includes(server)) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            this._previousStatuses.clear();
+            for (const server of allServers) {
+                this._previousStatuses.set(server, this.getServerStatus(server));
+            }
+            this._onServerStatusChanged.fire();
         }
     }
 
@@ -303,7 +379,7 @@ export class McpToolDiscovery implements vscode.Disposable {
      * Infer MCP server names from tool name patterns when no config is available.
      * VS Code MCP tools follow: mcp_<serverName>_<toolName>
      * Server names may contain underscores (e.g., "azure_mcp" → tools named "mcp_azure_mcp_<tool>").
-     * 
+     *
      * Algorithm: find the longest common prefix segments shared by multiple tools.
      * If there are tool names like mcp_azure_mcp_cosmos, mcp_azure_mcp_aks, mcp_azure_mcp_sql,
      * the common server prefix is "azure_mcp".
@@ -425,9 +501,16 @@ export class McpToolDiscovery implements vscode.Disposable {
 
                 for (const [name, propSchema] of Object.entries(properties)) {
                     const prop = propSchema as any;
+                    // prop.type can be a string, array (e.g., ["string", "null"]), or object
+                    let typeStr = 'string';
+                    if (typeof prop.type === 'string') {
+                        typeStr = prop.type;
+                    } else if (Array.isArray(prop.type)) {
+                        typeStr = prop.type.filter((t: any) => t !== 'null').join(' | ') || 'string';
+                    }
                     params.push({
                         name,
-                        type: prop.type || 'string',
+                        type: typeStr,
                         description: prop.description || '',
                         required: required.includes(name)
                     });

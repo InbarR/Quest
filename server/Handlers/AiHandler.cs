@@ -476,17 +476,19 @@ You MUST use ONLY the tools listed in the '## AVAILABLE MCP TOOLS' section below
 
 ## MCPQL SYNTAX
 ```
-server | tool(param1='value1', param2='value2') | post-processing
-server.tool(param1='value1')  // dot syntax also works
+server
+| tool(param1='value1', param2='value2')
+| post-processing
 ```
-
+Each clause (tool call, operators) goes on its own line starting with `|`.
 The **server** is the MCP server name (e.g., `github`, `azuredevops`, `filesystem`).
 The **tool** is the tool name within that server (e.g., `list_issues`, `get_work_items`).
 Parameters use `name='value'` syntax with single quotes for strings.
 
 ## POST-PROCESSING OPERATORS (applied on results, KQL-like)
 - `| where column op value` — Filter rows (operators: ==, !=, >, >=, <, <=, contains, startswith, endswith, has, matches)
-- `| project col1, col2` — Select specific columns
+- `| project col1, col2` — Select only specific columns
+- `| project-reorder col1, col2` — Move columns to front, keep the rest
 - `| take N` — Limit to first N rows
 - `| sort by column [asc|desc]` — Sort rows
 - `| count` — Count total rows
@@ -503,26 +505,33 @@ Parameters use `name='value'` syntax with single quotes for strings.
 ## EXAMPLES
 ```mcpql
 // List work items from Azure DevOps
-azuredevops | get_work_items(project='MyProject', query='SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = ''Active''')
+azuredevops
+| get_work_items(project='MyProject', query='SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = ''Active''')
 ```
 
 ```mcpql
 // List issues from a GitHub repo with filtering
-github | list_issues(repo='org/repo') | where state == 'open' | project title, author | take 10
+github
+| list_issues(repo='org/repo')
+| where state == 'open'
+| project title, author
+| take 10
 ```
 
 ```mcpql
 // Read a file
-filesystem | read_file(path='/tmp/data.csv')
+filesystem
+| read_file(path='/tmp/data.csv')
 ```
 
 ## INSTRUCTIONS
 1. If the user provides a '## USER MCPQL' block, treat it as the CURRENT QUERY and modify it based on their request.
 2. **ALWAYS** use correct server and tool names from the AVAILABLE MCP TOOLS list — this is the single source of truth.
 3. Wrap queries in triple backticks (```mcpql).
-4. Include post-processing operators when the user wants to filter, sort, or limit results.
-5. Use single quotes for string parameter values.
-6. When the user mentions a specific project, server, or resource, use it as parameter values.
+4. **FORMAT: Put each clause on its own line** — server name on line 1, `| tool(...)` on line 2, each operator on subsequent lines. Never put everything on one line.
+5. Include post-processing operators when the user wants to filter, sort, or limit results.
+6. Use single quotes for string parameter values.
+7. When the user mentions a specific project, server, or resource, use it as parameter values.
 
 ## OUTPUT RULE
 - For query requests: output the query in ```mcpql blocks with brief explanation of what the query does and which tool it uses.

@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 const MCPQL_OPERATORS = [
     { name: 'where', description: 'Filter rows by a condition' },
     { name: 'project', description: 'Select specific columns to display' },
+    { name: 'project-reorder', description: 'Move columns to front, keep the rest' },
     { name: 'take', description: 'Limit the number of returned rows' },
     { name: 'sort', description: 'Sort rows by a column' },
     { name: 'count', description: 'Count total rows' },
@@ -376,9 +377,13 @@ export class McpqlCompletionProvider implements vscode.CompletionItemProvider {
 
         const snippets: { label: string; detail: string; insertText: string }[] = [];
 
-        for (const server of servers.slice(0, 3)) { // Limit to first 3 servers
+        // Add well-known recipe snippets for specific servers
+        snippets.push(...this.getRecipeSnippets(servers));
+
+        // Add auto-generated snippets from first few servers/tools
+        for (const server of servers.slice(0, 3)) {
             const tools = this.getToolsForServer(server);
-            for (const tool of tools.slice(0, 2)) { // First 2 tools per server
+            for (const tool of tools.slice(0, 2)) {
                 const requiredParams = tool.parameters.filter(p => p.required);
                 let paramStr: string;
                 if (requiredParams.length > 0) {
@@ -404,5 +409,76 @@ export class McpqlCompletionProvider implements vscode.CompletionItemProvider {
             item.sortText = '2' + s.label;
             return item;
         });
+    }
+
+    /**
+     * Well-known recipe snippets for common MCP servers (ADO, GitHub, etc.)
+     */
+    private getRecipeSnippets(servers: string[]): { label: string; detail: string; insertText: string }[] {
+        const recipes: { label: string; detail: string; insertText: string }[] = [];
+
+        // ADO repo snippets — if 'ado' server is available
+        const adoServer = servers.find(s => s.toLowerCase() === 'ado' || s.toLowerCase().includes('azure-devops'));
+        if (adoServer) {
+            const hasSearchCode = this.getToolsForServer(adoServer).some(t => t.toolName === 'search_code');
+            const hasListRepos = this.getToolsForServer(adoServer).some(t => t.toolName === 'repo_list_repos_by_project');
+            const hasGetRepo = this.getToolsForServer(adoServer).some(t => t.toolName === 'repo_get_repo_by_name_or_id');
+            const hasListBranches = this.getToolsForServer(adoServer).some(t => t.toolName === 'repo_list_branches_by_repo');
+            const hasSearchCommits = this.getToolsForServer(adoServer).some(t => t.toolName === 'repo_search_commits');
+            const hasListPRs = this.getToolsForServer(adoServer).some(t => t.toolName === 'repo_list_pull_requests_by_repo_or_project');
+            const hasSearchWorkItems = this.getToolsForServer(adoServer).some(t => t.toolName === 'search_workitem');
+
+            if (hasSearchCode) {
+                recipes.push({
+                    label: 'ADO: Search code in repo',
+                    detail: 'Search for code across ADO repositories',
+                    insertText: `${adoServer}\n| search_code(searchText='\${1:keyword}', project='\${2:project}', repository='\${3:repo}', top=\${4:10})`
+                });
+            }
+            if (hasListRepos) {
+                recipes.push({
+                    label: 'ADO: List repos in project',
+                    detail: 'List all repositories in an ADO project',
+                    insertText: `${adoServer}\n| repo_list_repos_by_project(project='\${1:project}')`
+                });
+            }
+            if (hasGetRepo) {
+                recipes.push({
+                    label: 'ADO: Get repo details',
+                    detail: 'Get details for a specific repository',
+                    insertText: `${adoServer}\n| repo_get_repo_by_name_or_id(project='\${1:project}', repositoryNameOrId='\${2:repo}')`
+                });
+            }
+            if (hasListBranches) {
+                recipes.push({
+                    label: 'ADO: List branches',
+                    detail: 'List branches in a repository',
+                    insertText: `${adoServer}\n| repo_list_branches_by_repo(project='\${1:project}', repositoryNameOrId='\${2:repo}')`
+                });
+            }
+            if (hasSearchCommits) {
+                recipes.push({
+                    label: 'ADO: Search commits',
+                    detail: 'Search commits in a repository',
+                    insertText: `${adoServer}\n| repo_search_commits(project='\${1:project}', repositoryNameOrId='\${2:repo}', searchCriteria='\${3:keyword}')`
+                });
+            }
+            if (hasListPRs) {
+                recipes.push({
+                    label: 'ADO: List pull requests',
+                    detail: 'List pull requests in a project or repo',
+                    insertText: `${adoServer}\n| repo_list_pull_requests_by_repo_or_project(project='\${1:project}')\n| project-reorder title, status, createdBy\n| take 20`
+                });
+            }
+            if (hasSearchWorkItems) {
+                recipes.push({
+                    label: 'ADO: Search work items',
+                    detail: 'Search work items by keyword',
+                    insertText: `${adoServer}\n| search_workitem(searchText='\${1:keyword}', project='\${2:project}', top=\${3:20})`
+                });
+            }
+        }
+
+        return recipes;
     }
 }

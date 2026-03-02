@@ -78,7 +78,7 @@ export class HistoryWebViewProvider implements vscode.WebviewViewProvider {
         try {
             let history = await this._client.getHistory(100);
             // Filter by current mode
-            this._history = history.filter(p => p.type === this._currentMode);
+            this._history = history.filter(p => (p.type || 'kusto') === this._currentMode);
             this._view.webview.postMessage({
                 command: 'update',
                 history: this._history

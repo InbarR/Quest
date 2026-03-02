@@ -89,10 +89,12 @@ Keep explanations concise and focus on providing working queries.",
         try
         {
             // Initialize paths for Quest
-            var appDataPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Quest"
-            );
+            // Prefer legacy "QueryStudio" folder if it exists (pre-rename), otherwise use "Quest"
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var legacyPath = Path.Combine(localAppData, "QueryStudio");
+            var appDataPath = Directory.Exists(legacyPath)
+                ? legacyPath
+                : Path.Combine(localAppData, "Quest");
             Directory.CreateDirectory(appDataPath);
 
             log($"App data path: {appDataPath}");
@@ -276,8 +278,8 @@ public class SimpleJsonRpcServer
             var method = root.GetProperty("method").GetString() ?? "";
             var paramsElement = root.TryGetProperty("params", out var p) ? p : default;
 
-            // Don't log health checks to reduce noise
-            if (method != "health/check")
+            // Don't log noisy high-frequency requests
+            if (method != "health/check" && method != "preset/list" && method != "history/list")
                 _log($"Request: {method}");
 
             object? result = method switch
@@ -326,6 +328,7 @@ public class SimpleJsonRpcServer
                 "mcp/setSchema" => SetMcpSchema(paramsElement),
                 "mcp/getSchema" => GetMcpSchema(),
                 "mcp/clearSchema" => ClearMcpSchema(),
+                "outlook/createRule" => CreateRuleFromTemplate(paramsElement),
                 _ => throw new Exception($"Unknown method: {method}")
             };
 
@@ -812,6 +815,15 @@ public class SimpleJsonRpcServer
         var property = p.GetProperty("property").GetString()!;
         var value = p.GetProperty("value").GetString()!;
         return _outlook.UpdateRuleProperty(ruleName, property, value);
+    }
+
+    private object? CreateRuleFromTemplate(JsonElement p)
+    {
+        var name = p.GetProperty("name").GetString()!;
+        var enabled = p.TryGetProperty("enabled", out var e) && e.GetBoolean();
+        var properties = JsonSerializer.Deserialize<RulePropertyInfo[]>(
+            p.GetProperty("properties").GetRawText(), _jsonOptions) ?? Array.Empty<RulePropertyInfo>();
+        return _outlook.CreateRuleFromTemplate(name, enabled, properties);
     }
 
 }

@@ -118,7 +118,7 @@ public class McpDataSource : IDataSource, ISchemaProvider, IDataSourceHelp
                     Rows: Array.Empty<string[]>(),
                     RowCount: 0,
                     ExecutionTimeMs: 0,
-                    Error: $"MCP_INVOKE_REQUIRED:{parsed.ServerName}:{parsed.ToolName}:{JsonSerializer.Serialize(parsed.Parameters)}"
+                    Error: $"MCP_INVOKE_REQUIRED:{JsonSerializer.Serialize(new { server = parsed.ServerName, tool = parsed.ToolName, parameters = parsed.Parameters })}"
                 ));
             }
 

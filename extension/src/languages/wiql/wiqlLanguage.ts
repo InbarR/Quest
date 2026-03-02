@@ -3,20 +3,18 @@ import { SidecarClient } from '../../sidecar/SidecarClient';
 import { WiqlCompletionProvider } from './wiqlCompletionProvider';
 
 export function registerWiqlLanguage(context: vscode.ExtensionContext, client: SidecarClient) {
-    // Register completion provider
+    // Register completion provider for all schemes
     const completionProvider = new WiqlCompletionProvider();
-    context.subscriptions.push(
-        vscode.languages.registerCompletionItemProvider(
-            { language: 'wiql', scheme: 'file' },
-            completionProvider,
-            '[', '.', ' '
-        ),
-        vscode.languages.registerCompletionItemProvider(
-            { language: 'wiql', scheme: 'untitled' },
-            completionProvider,
-            '[', '.', ' '
-        )
-    );
+    const schemes = ['file', 'untitled', 'vscode-userdata'];
+    for (const scheme of schemes) {
+        context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(
+                { language: 'wiql', scheme },
+                completionProvider,
+                '[', '.', ' ', '@'
+            )
+        );
+    }
 
     // Register document formatting
     context.subscriptions.push(

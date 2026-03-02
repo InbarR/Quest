@@ -251,6 +251,7 @@ public class McpqlParser
                 var type = word.ToLowerInvariant() switch
                 {
                     "where" => McpqlTokenType.Where,
+                    "project-reorder" => McpqlTokenType.ProjectReorder,
                     "project" => McpqlTokenType.Project,
                     "take" => McpqlTokenType.Take,
                     "sort" => McpqlTokenType.Sort,
@@ -369,6 +370,7 @@ public class McpqlParser
     {
         McpqlTokenType.Where   => true,
         McpqlTokenType.Project => true,
+        McpqlTokenType.ProjectReorder => true,
         McpqlTokenType.Take    => true,
         McpqlTokenType.Sort    => true,
         McpqlTokenType.By      => true,
@@ -444,11 +446,12 @@ public class McpqlParser
         {
             McpqlTokenType.Where => ParseWhereOperator(tokens, ref pos),
             McpqlTokenType.Project => ParseProjectOperator(tokens, ref pos),
+            McpqlTokenType.ProjectReorder => ParseProjectReorderOperator(tokens, ref pos),
             McpqlTokenType.Take => ParseTakeOperator(tokens, ref pos),
             McpqlTokenType.Sort => ParseSortOperator(tokens, ref pos),
             McpqlTokenType.Count => ParseCountOperator(tokens, ref pos),
             McpqlTokenType.Extend => ParseExtendOperator(tokens, ref pos),
-            _ => throw new McpqlParseException($"Unknown operator '{token.Value}'. Expected: where, project, take, sort, count, extend",
+            _ => throw new McpqlParseException($"Unknown operator '{token.Value}'. Expected: where, project, project-reorder, take, sort, count, extend",
                 token.Line, token.Column)
         };
     }
@@ -460,14 +463,20 @@ public class McpqlParser
 
         while (pos < tokens.Count && tokens[pos].Type != McpqlTokenType.Pipe)
         {
-            // Skip logical operators between conditions
+            // Capture logical operator between conditions
+            string logicalOp = string.Empty;
             if (conditions.Count > 0)
             {
                 if (tokens[pos].Type == McpqlTokenType.And || tokens[pos].Type == McpqlTokenType.Or)
                 {
+                    logicalOp = tokens[pos].Value.ToLowerInvariant();
                     pos++; // consume 'and'/'or'
                     if (pos >= tokens.Count || tokens[pos].Type == McpqlTokenType.Pipe)
                         break;
+                }
+                else
+                {
+                    logicalOp = "and"; // default to 'and' if no explicit operator
                 }
             }
 
@@ -511,7 +520,7 @@ public class McpqlParser
                     tokens[pos].Line, tokens[pos].Column);
             }
 
-            conditions.Add(new McpqlCondition { Column = column, Operator = op, Value = value });
+            conditions.Add(new McpqlCondition { Column = column, Operator = op, Value = value, LogicalOperator = logicalOp });
         }
 
         return new McpqlWhereOperator { Conditions = conditions };
@@ -544,6 +553,35 @@ public class McpqlParser
                 tokens[pos > 0 ? pos - 1 : 0].Line, tokens[pos > 0 ? pos - 1 : 0].Column);
 
         return new McpqlProjectOperator { Columns = columns };
+    }
+
+    private McpqlOperator ParseProjectReorderOperator(List<McpqlToken> tokens, ref int pos)
+    {
+        pos++; // consume 'project-reorder'
+        var columns = new List<string>();
+
+        while (pos < tokens.Count && tokens[pos].Type != McpqlTokenType.Pipe)
+        {
+            if (tokens[pos].Type == McpqlTokenType.Identifier || tokens[pos].Type == McpqlTokenType.String)
+            {
+                columns.Add(tokens[pos].Value);
+                pos++;
+            }
+            else if (tokens[pos].Type == McpqlTokenType.Comma)
+            {
+                pos++; // skip comma
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (columns.Count == 0)
+            throw new McpqlParseException("project-reorder requires at least one column name",
+                tokens[pos > 0 ? pos - 1 : 0].Line, tokens[pos > 0 ? pos - 1 : 0].Column);
+
+        return new McpqlProjectReorderOperator { Columns = columns };
     }
 
     private McpqlOperator ParseTakeOperator(List<McpqlToken> tokens, ref int pos)
@@ -688,6 +726,7 @@ public class McpqlParser
                 McpqlWhereOperator w => "| where " + string.Join(" and ", w.Conditions.Select(c =>
                     $"{c.Column} {c.Operator} '{c.Value}'")),
                 McpqlProjectOperator p2 => "| project " + string.Join(", ", p2.Columns),
+                McpqlProjectReorderOperator pr => "| project-reorder " + string.Join(", ", pr.Columns),
                 McpqlTakeOperator t => $"| take {t.Count}",
                 McpqlSortOperator s => $"| sort by {s.Column} {(s.Ascending ? "asc" : "desc")}",
                 McpqlCountOperator => "| count",
@@ -764,6 +803,14 @@ public class McpqlProjectOperator : McpqlOperator
 }
 
 /// <summary>
+/// project-reorder col1, col2 — moves specified columns to front, keeps rest in order
+/// </summary>
+public class McpqlProjectReorderOperator : McpqlOperator
+{
+    public List<string> Columns { get; set; } = new();
+}
+
+/// <summary>
 /// take N
 /// </summary>
 public class McpqlTakeOperator : McpqlOperator
@@ -802,6 +849,10 @@ public class McpqlCondition
     public string Column { get; set; } = string.Empty;
     public string Operator { get; set; } = "==";
     public string Value { get; set; } = string.Empty;
+    /// <summary>
+    /// Logical operator preceding this condition ("and" or "or"). Empty for the first condition.
+    /// </summary>
+    public string LogicalOperator { get; set; } = string.Empty;
 }
 
 #endregion
@@ -823,6 +874,7 @@ public enum McpqlTokenType
     Operator,
     Where,
     Project,
+    ProjectReorder,
     Take,
     Sort,
     By,

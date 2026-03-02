@@ -115,12 +115,25 @@ export class WiqlCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     private getKeywordCompletions(): vscode.CompletionItem[] {
-        return WIQL_KEYWORDS.map(kw => {
+        const items: vscode.CompletionItem[] = [];
+        for (const kw of WIQL_KEYWORDS) {
+            // Add both uppercase and lowercase variants for matching
             const item = new vscode.CompletionItem(kw, vscode.CompletionItemKind.Keyword);
             item.detail = 'WIQL Keyword';
             item.sortText = '1' + kw;
-            return item;
-        });
+            item.filterText = kw; // matches uppercase typing
+            items.push(item);
+
+            // Also add lowercase variant so typing "work" matches "WorkItems"
+            if (kw !== kw.toLowerCase()) {
+                const lowerItem = new vscode.CompletionItem(kw, vscode.CompletionItemKind.Keyword);
+                lowerItem.detail = 'WIQL Keyword';
+                lowerItem.sortText = '1' + kw;
+                lowerItem.filterText = kw.toLowerCase();
+                items.push(lowerItem);
+            }
+        }
+        return items;
     }
 
     private getSnippetCompletions(): vscode.CompletionItem[] {

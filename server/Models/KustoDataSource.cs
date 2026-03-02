@@ -124,16 +124,24 @@ public class KustoDataSource : IDataSource, ISchemaProvider, IDataSourceHelp, IE
                 );
             }
 
+            // Management commands (.show) work at cluster scope - use placeholder if no database
             if (string.IsNullOrEmpty(database))
             {
-                return new QueryResult(
-                    Success: false,
-                    Columns: Array.Empty<string>(),
-                    Rows: Array.Empty<string[]>(),
-                    RowCount: 0,
-                    ExecutionTimeMs: sw.ElapsedMilliseconds,
-                    Error: "Database is required"
-                );
+                if (request.Query.TrimStart().StartsWith(".show", StringComparison.OrdinalIgnoreCase))
+                {
+                    database = "NetDefaultDB";
+                }
+                else
+                {
+                    return new QueryResult(
+                        Success: false,
+                        Columns: Array.Empty<string>(),
+                        Rows: Array.Empty<string[]>(),
+                        RowCount: 0,
+                        ExecutionTimeMs: sw.ElapsedMilliseconds,
+                        Error: "Database is required. Please select a data source."
+                    );
+                }
             }
 
             _log($"Executing Kusto query on {clusterUrl}/{database}");
@@ -173,13 +181,23 @@ public class KustoDataSource : IDataSource, ISchemaProvider, IDataSourceHelp, IE
         catch (Exception ex)
         {
             _log($"Kusto query error: {ex.Message}");
+            var errorMessage = ex.Message;
+
+            // Provide actionable guidance for auth errors
+            if (errorMessage.Contains("Unauthorized") || errorMessage.Contains("401") || errorMessage.Contains("Forbidden") || errorMessage.Contains("403"))
+            {
+                errorMessage = $"Authentication failed for {request.ClusterUrl ?? _clusterUrl}. " +
+                    "Try running 'az login' in a terminal, or sign in to the Azure extension in VS Code, then retry. " +
+                    $"Original error: {ex.Message}";
+            }
+
             return new QueryResult(
                 Success: false,
                 Columns: Array.Empty<string>(),
                 Rows: Array.Empty<string[]>(),
                 RowCount: 0,
                 ExecutionTimeMs: sw.ElapsedMilliseconds,
-                Error: ex.Message
+                Error: errorMessage
             );
         }
     }

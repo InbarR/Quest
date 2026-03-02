@@ -239,6 +239,18 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     this._updateView();
                 }
                 break;
+            case 'closeErrorTabs':
+                const errorRemoved = this._tabs.filter(t => t.result && t.result.success !== false);
+                if (errorRemoved.length !== this._tabs.length) {
+                    this._tabs = errorRemoved;
+                    if (this._tabs.length === 0) {
+                        this._activeTabId = null;
+                    } else if (!this._tabs.find(t => t.id === this._activeTabId)) {
+                        this._activeTabId = this._tabs[0].id;
+                    }
+                    this._updateView();
+                }
+                break;
             case 'renameTab':
                 const tab = this._tabs.find(t => t.id === message.tabId);
                 if (tab) {
@@ -587,8 +599,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     private _openInAdx(query: string, clusterUrl: string, database: string): void {
         try {
             const encodedQuery = encodeURIComponent(query);
-            const clusterUri = clusterUrl.includes('://') ? clusterUrl : `https://${clusterUrl}.kusto.windows.net`;
-            const adxUrl = `https://dataexplorer.azure.com/clusters/${encodeURIComponent(clusterUri)}/databases/${encodeURIComponent(database)}?query=${encodedQuery}`;
+            const clusterHost = clusterUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const adxUrl = `https://dataexplorer.azure.com/clusters/${encodeURIComponent(clusterHost)}/databases/${encodeURIComponent(database)}?query=${encodedQuery}`;
             vscode.env.openExternal(vscode.Uri.parse(adxUrl));
             vscode.window.showInformationMessage('Opened in Azure Data Explorer');
         } catch (error) {
@@ -671,7 +683,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 database: database,
                 queryType: queryType,
                 hasQuery: !!query,
-                hasConnection: !!(clusterUrl && database) || queryType === 'outlook',
+                hasConnection: !!(clusterUrl && database) || queryType === 'outlook' || queryType === 'mcp',
                 replaceTab: replaceCurrentTab
             });
         }
@@ -1555,11 +1567,25 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             top: 0;
             bottom: 0;
             width: 400px;
-            max-width: 50vw;
+            min-width: 200px;
+            max-width: 80vw;
             background: var(--vscode-sideBar-background);
             border-left: 1px solid var(--vscode-sideBar-border);
             z-index: 999;
             box-shadow: -4px 0 12px rgba(0,0,0,0.3);
+        }
+        .preview-resize-handle {
+            position: absolute;
+            left: -3px;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            cursor: col-resize;
+            z-index: 1000;
+        }
+        .preview-resize-handle:hover,
+        .preview-resize-handle.active {
+            background: var(--vscode-focusBorder);
         }
         .preview-header {
             display: flex;
@@ -2720,6 +2746,36 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 previewPanel = document.createElement('div');
                 previewPanel.id = 'adoPreviewPanel';
                 previewPanel.className = 'ado-preview-panel';
+
+                // Add resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'preview-resize-handle';
+                previewPanel.appendChild(resizeHandle);
+
+                let isResizing = false;
+                resizeHandle.addEventListener('mousedown', (e) => {
+                    isResizing = true;
+                    resizeHandle.classList.add('active');
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    e.preventDefault();
+                });
+                document.addEventListener('mousemove', (e) => {
+                    if (!isResizing) return;
+                    const newWidth = window.innerWidth - e.clientX;
+                    if (newWidth >= 200 && newWidth <= window.innerWidth * 0.8) {
+                        previewPanel.style.width = newWidth + 'px';
+                    }
+                });
+                document.addEventListener('mouseup', () => {
+                    if (isResizing) {
+                        isResizing = false;
+                        resizeHandle.classList.remove('active');
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                    }
+                });
+
                 document.body.appendChild(previewPanel);
             }
 
@@ -3055,10 +3111,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             menu.innerHTML = '';
             addMenuItem(menu, '✏️ Rename', () => vscode.postMessage({ command: 'renameTab', tabId: id }));
             addMenuSep(menu);
-            addMenuItem(menu, '❌ Close', () => vscode.postMessage({ command: 'closeTab', tabId: id }));
-            addMenuItem(menu, '❌ Close Others', () => vscode.postMessage({ command: 'closeOtherTabs', tabId: id }));
-            addMenuItem(menu, '❌ Close All', () => vscode.postMessage({ command: 'closeAllTabs' }));
+            addMenuItem(menu, '✕ Close', () => vscode.postMessage({ command: 'closeTab', tabId: id }));
+            addMenuItem(menu, '☰ Close Others', () => vscode.postMessage({ command: 'closeOtherTabs', tabId: id }));
+            addMenuItem(menu, '✖ Close All', () => vscode.postMessage({ command: 'closeAllTabs' }));
             addMenuItem(menu, '🗑️ Close All Empty', () => vscode.postMessage({ command: 'closeEmptyTabs' }));
+            addMenuItem(menu, '❌ Close All Errors', () => vscode.postMessage({ command: 'closeErrorTabs' }));
             menu.style.display = 'block';
             menu.style.left = e.pageX + 'px';
             menu.style.top = e.pageY + 'px';
@@ -3196,8 +3253,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             }
             draggedCol = colIndex;
             e.target.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', colIndex);
+            e.dataTransfer.effectAllowed = 'copyMove';
+            // Set column name as text so it can be dropped into the query editor
+            const colName = currentData.columns[colIndex] || String(colIndex);
+            e.dataTransfer.setData('text/plain', colName);
+            e.dataTransfer.setData('application/quest-column-index', String(colIndex));
         }
 
         function onColDragOver(e) {
@@ -3218,7 +3278,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             if (th) th.classList.remove('drag-over');
             document.querySelectorAll('th').forEach(t => t.classList.remove('dragging'));
 
-            if (draggedCol === null || draggedCol === targetCol) return;
+            if (draggedCol === null || draggedCol === targetCol) { draggedCol = null; return; }
 
             // Reorder columns in data
             const reorderArray = (arr) => {

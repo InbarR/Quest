@@ -136,6 +136,12 @@ public class OutlookHandler : IDisposable
         return _outlookService.UpdateRuleProperty(ruleName, property, value);
     }
 
+    public RuleOperationResult CreateRuleFromTemplate(string name, bool enabled, RulePropertyInfo[] properties)
+    {
+        _log($"Creating rule \"{name}\" from template ({properties.Length} properties)");
+        return _outlookService.CreateRuleFromTemplate(name, enabled, properties);
+    }
+
     public void Dispose()
     {
         _outlookService.Dispose();

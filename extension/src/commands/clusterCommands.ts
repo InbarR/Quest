@@ -415,6 +415,7 @@ export function registerClusterCommands(
 
                     const selected = await vscode.window.showQuickPick(items, {
                         canPickMany: true,
+                        ignoreFocusOut: true,
                         placeHolder: `Select databases to add from ${clusterName} (${dbNames.length} found)`
                     });
 
@@ -1113,10 +1114,11 @@ async function addDataSourceFromImage(
     // Show progress while extracting
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Analyzing screenshot with AI...',
+        title: 'Analyzing screenshot...',
         cancellable: false
-    }, async () => {
+    }, async (progress) => {
         try {
+            progress.report({ message: 'Extracting data sources with AI...' });
             const extracted = await client.extractDataSourceFromImage({
                 imageBase64: imageBase64!,
                 imageMimeType: mimeType!,
@@ -1127,15 +1129,18 @@ async function addDataSourceFromImage(
                 // Handle auth required - prompt VS Code GitHub sign-in and retry
                 if (extracted.error === 'AUTH_REQUIRED') {
                     try {
+                        progress.report({ message: 'Signing in to GitHub...' });
                         const session = await vscode.authentication.getSession('github', ['read:user'], { createIfNone: true });
                         if (session) {
                             await client.setAiToken(session.accessToken);
+                            progress.report({ message: 'Retrying extraction...' });
                             const retry = await client.extractDataSourceFromImage({
                                 imageBase64: imageBase64!,
                                 imageMimeType: mimeType!,
                                 mode: mode === 'kusto' ? 'kusto' : 'ado'
                             });
                             if (retry.success) {
+                                progress.report({ message: 'Fetching databases...' });
                                 await handleExtractedResult(client, clusterProvider, retry, mode);
                                 return;
                             }
@@ -1152,6 +1157,7 @@ async function addDataSourceFromImage(
                 return;
             }
 
+            progress.report({ message: 'Fetching databases...' });
             await handleExtractedResult(client, clusterProvider, extracted, mode);
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -1211,7 +1217,35 @@ async function addMultipleClusters(
     const items: ClusterDbItem[] = [];
     for (const cluster of clusters) {
         if (cluster.databases.length === 0) {
-            // Cluster with no databases
+            // No databases extracted — try auto-discovery via .show databases
+            try {
+                const dbResult = await client.executeQuery({
+                    query: '.show databases | project DatabaseName',
+                    clusterUrl: normalizeKustoUrl(cluster.clusterUrl),
+                    database: 'NetDefaultDB',
+                    type: 'kusto',
+                    timeout: 30,
+                    maxResults: 500
+                });
+                if (dbResult.success && dbResult.rows.length > 0) {
+                    const discoveredDbs = dbResult.rows.map(r => r[0]).filter(Boolean);
+                    for (const db of discoveredDbs) {
+                        items.push({
+                            label: `${cluster.displayName || cluster.clusterUrl} / ${db}`,
+                            description: cluster.clusterUrl,
+                            picked: true,
+                            clusterUrl: cluster.clusterUrl,
+                            database: db,
+                            clusterDisplayName: cluster.displayName
+                        });
+                    }
+                    continue;
+                }
+            } catch {
+                // Auto-discovery failed — fall through to add without database
+            }
+
+            // Fallback: add cluster without database
             items.push({
                 label: cluster.displayName || cluster.clusterUrl,
                 description: cluster.clusterUrl,
@@ -1235,6 +1269,7 @@ async function addMultipleClusters(
 
     const selected = await vscode.window.showQuickPick(items, {
         canPickMany: true,
+        ignoreFocusOut: true,
         placeHolder: `Select data sources to add (${items.length} found in screenshot)`
     });
 
@@ -1444,6 +1479,7 @@ async function importFromKustoExplorer(
 
         const selected = await vscode.window.showQuickPick(items, {
             canPickMany: true,
+            ignoreFocusOut: true,
             placeHolder: `Select connections to import (${result.connections.length} found)`
         });
 
@@ -1459,16 +1495,66 @@ async function importFromKustoExplorer(
             try {
                 let database = conn.database;
 
-                // If no database specified, ask user to enter one
+                // If no database specified, try to auto-discover databases from cluster
                 if (!database) {
+                    let discoveredDbs: string[] = [];
+                    try {
+                        const dbResult = await client.executeQuery({
+                            query: '.show databases | project DatabaseName',
+                            clusterUrl: normalizeKustoUrl(conn.clusterUrl),
+                            database: 'NetDefaultDB',
+                            type: 'kusto',
+                            timeout: 30,
+                            maxResults: 500
+                        });
+                        if (dbResult.success && dbResult.rows.length > 0) {
+                            discoveredDbs = dbResult.rows.map(r => r[0]).filter(Boolean);
+                        }
+                    } catch {
+                        // Auto-discovery failed — fall back to manual input
+                    }
+
+                    if (discoveredDbs.length > 0) {
+                        // Let user pick from discovered databases
+                        const dbItems = discoveredDbs.map(db => ({
+                            label: db,
+                            picked: true
+                        }));
+                        const selectedDbs = await vscode.window.showQuickPick(dbItems, {
+                            canPickMany: true,
+                            ignoreFocusOut: true,
+                            placeHolder: `Select databases for ${conn.name} (${discoveredDbs.length} found)`
+                        });
+
+                        if (!selectedDbs || selectedDbs.length === 0) {
+                            skipped++;
+                            continue;
+                        }
+
+                        // Add each selected database as a separate connection
+                        for (const dbItem of selectedDbs) {
+                            const cluster: ClusterInfo = {
+                                id: Date.now().toString() + '_' + imported,
+                                name: conn.name,
+                                url: normalizeKustoUrl(conn.clusterUrl),
+                                database: dbItem.label,
+                                type: 'kusto',
+                                isFavorite: false
+                            };
+                            await client.addCluster(cluster);
+                            imported++;
+                        }
+                        continue;
+                    }
+
+                    // Fallback: manual input if auto-discovery failed
                     database = await vscode.window.showInputBox({
                         prompt: `Enter database name for ${conn.name} (${conn.clusterUrl})`,
                         placeHolder: 'e.g., SampleDB',
-                        title: 'Database Required'
+                        title: 'Database Required (auto-discovery failed)'
                     });
 
                     if (!database) {
-                        // User cancelled - skip this connection
                         skipped++;
                         continue;
                     }
