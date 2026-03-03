@@ -103,6 +103,14 @@ Keep explanations concise and focus on providing working queries.",
             var kustoService = new KustoService();
             var clusterManager = new ClusterManager(Path.Combine(appDataPath, "Clusters.csv"));
             var presetManager = new PresetManager(Path.Combine(appDataPath, "Presets.json"));
+
+            // Also load presets from the other folder (Quest vs QueryStudio) so we find all presets
+            var questPath = Path.Combine(localAppData, "Quest");
+            var otherPath = appDataPath == legacyPath ? questPath : legacyPath;
+            var otherPresetsFile = Path.Combine(otherPath, "Presets.json");
+            PresetManager? secondaryPresetManager = (Directory.Exists(otherPath) && File.Exists(otherPresetsFile))
+                ? new PresetManager(otherPresetsFile)
+                : null;
             var schemaManager = new KustoSchemaManager(Path.Combine(appDataPath, "KustoSchema.json"));
 
             // Initialize data source registry
@@ -157,7 +165,7 @@ Keep explanations concise and focus on providing working queries.",
             var healthHandler = new HealthHandler();
             var queryHandler = new QueryHandler(dataSourceRegistry, log);
             var clusterHandler = new ClusterHandler(clusterManager);
-            var presetHandler = new PresetHandler(presetManager, log);
+            var presetHandler = new PresetHandler(presetManager, secondaryPresetManager, log);
             var schemaHandler = new SchemaHandler(schemaManager, kustoService, log);
             var aiHandler = new AiHandler(aiHelper, log);
             var resultsHistoryHandler = new ResultsHistoryHandler(appDataPath, log);

@@ -6,12 +6,14 @@ namespace Quest.Server.Handlers;
 public class PresetHandler
 {
     private readonly PresetManager _presetManager;
+    private readonly PresetManager? _secondaryPresetManager;
     private readonly Action<string>? _log;
     private List<KustoPreset> _presets = new();
 
-    public PresetHandler(PresetManager presetManager, Action<string>? log = null)
+    public PresetHandler(PresetManager presetManager, PresetManager? secondaryPresetManager = null, Action<string>? log = null)
     {
         _presetManager = presetManager;
+        _secondaryPresetManager = secondaryPresetManager;
         _log = log;
         LoadPresets();
     }
@@ -19,6 +21,23 @@ public class PresetHandler
     private void LoadPresets()
     {
         _presets = _presetManager.LoadPresets();
+
+        // Merge presets from secondary location (Quest vs QueryStudio)
+        if (_secondaryPresetManager != null)
+        {
+            var secondaryPresets = _secondaryPresetManager.LoadPresets();
+            foreach (var sp in secondaryPresets)
+            {
+                // Avoid duplicates: match by name + query for saved presets, by query + time for auto-saved
+                bool exists = sp.AutoSaved
+                    ? _presets.Any(p => p.AutoSaved && p.Query == sp.Query && p.Time == sp.Time)
+                    : _presets.Any(p => !p.AutoSaved && string.Equals(p.PresetName, sp.PresetName, StringComparison.OrdinalIgnoreCase));
+                if (!exists)
+                {
+                    _presets.Add(sp);
+                }
+            }
+        }
     }
 
     public PresetInfo[] GetPresets()
