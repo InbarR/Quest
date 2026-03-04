@@ -40,6 +40,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     private _onRenameRule?: (currentName: string) => void;
     private _onSetRuleEnabled?: (ruleName: string, enabled: boolean) => void;
     private _onDeleteRule?: (ruleName: string) => void;
+    private _onSuggestFix?: (query: string, error: string) => void;
     private _context?: vscode.ExtensionContext;
     private _columnPresets: Map<string, { widths: Record<number, number>, order: string[] }> = new Map();
 
@@ -117,6 +118,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         this._onDeleteRule = callback;
     }
 
+    public setOnSuggestFix(callback: (query: string, error: string) => void) {
+        this._onSuggestFix = callback;
+    }
+
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
         context: vscode.WebviewViewResolveContext,
@@ -186,6 +191,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             case 'cancelQuery':
                 console.log('[Quest] Cancel message received from webview');
                 vscode.commands.executeCommand('queryStudio.cancelQuery');
+                break;
+            case 'suggestFix':
+                if (this._onSuggestFix) {
+                    this._onSuggestFix(message.query || '', message.error || '');
+                }
                 break;
             case 'openInAdx':
                 if (activeTab?.query && activeTab.clusterUrl && activeTab.database) {
@@ -749,13 +759,19 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             executionTimeMs: 0
         };
 
+        const existingIndex = this._tabs.findIndex(t => t.id === tabId);
+        const existingTab = existingIndex >= 0 ? this._tabs[existingIndex] : undefined;
+
         const newTab: ResultTab = {
             id: tabId,
             title: '❌ Error',
-            result: errorResult
+            result: errorResult,
+            query: existingTab?.query,
+            clusterUrl: existingTab?.clusterUrl,
+            database: existingTab?.database,
+            queryType: existingTab?.queryType
         };
 
-        const existingIndex = this._tabs.findIndex(t => t.id === tabId);
         if (existingIndex >= 0) {
             this._tabs[existingIndex] = newTab;
         } else {
@@ -795,7 +811,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             database: activeTab?.database,
             isLoading: activeTab?.isLoading || false,
             filterText: activeTab?.filterText || '',
-            filterMode: activeTab?.filterMode || 'filter'
+            filterMode: activeTab?.filterMode || 'filter',
+            query: activeTab?.query || ''
         });
     }
 
@@ -973,7 +990,8 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             background: transparent;
         }
         table {
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             table-layout: auto;
             font-size: 11px;
         }
@@ -994,7 +1012,6 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             user-select: none;
             z-index: 2;
             border-bottom: 2px solid var(--vscode-panel-border);
-            position: relative;
         }
         th:hover { background: var(--vscode-list-hoverBackground); }
         th.dragging { opacity: 0.5; }
@@ -1296,6 +1313,52 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             text-align: center;
             color: var(--vscode-descriptionForeground);
         }
+        .transpose-container {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            background: var(--vscode-editor-background);
+        }
+        .transpose-container.visible {
+            display: flex;
+        }
+        .transpose-table-wrapper {
+            flex: 1;
+            overflow: auto;
+        }
+        .transpose-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 12px;
+        }
+        .transpose-table th, .transpose-table td {
+            padding: 4px 8px;
+            text-align: left;
+            border: 1px solid var(--vscode-panel-border);
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .transpose-table th {
+            background: var(--vscode-sideBarSectionHeader-background);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        .transpose-table td.field-name {
+            font-weight: 500;
+            background: var(--vscode-sideBarSectionHeader-background);
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .transpose-table th.field-name-header {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+        }
         th.highlight { background: var(--vscode-editor-findMatchHighlightBackground); }
         th.col-highlight { background: rgba(138, 43, 226, 0.35) !important; }
         tr:nth-child(even) { background: rgba(255,255,255,0.02); }
@@ -1461,6 +1524,32 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             max-height: 200px;
             overflow: auto;
         }
+        .error-query-section {
+            margin-top: 12px;
+        }
+        .error-query-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .error-query-code {
+            background: var(--vscode-textCodeBlock-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 10px 14px;
+            font-family: var(--vscode-editor-font-family);
+            font-size: 12px;
+            color: var(--vscode-foreground);
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow: auto;
+            margin: 0;
+        }
         .error-actions {
             display: flex;
             gap: 8px;
@@ -1607,6 +1696,27 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             opacity: 0.7;
         }
         .preview-close:hover { opacity: 1; }
+        .preview-filter-bar {
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--vscode-sideBar-border);
+        }
+        .preview-filter-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 4px 8px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 3px;
+            font-size: 11px;
+            outline: none;
+        }
+        .preview-filter-input:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+        .preview-filter-input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
         .preview-content {
             flex: 1;
             overflow-y: auto;
@@ -1946,6 +2056,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         <button onclick="toggleChart()" id="chartBtn" title="Toggle chart view">📊 Chart</button>
         <button onclick="togglePivot()" id="pivotBtn" title="Toggle pivot table view">🔀 Pivot</button>
         <button onclick="startCompare()" id="compareBtn" title="Compare two result tabs">⚖️ Compare</button>
+        <button onclick="toggleTranspose()" id="transposeBtn" title="Toggle transpose view (fields as rows)">↔ Transpose</button>
         <div class="column-btn-wrapper">
             <button onclick="toggleColumnSelector(event)" id="columnsBtn" title="Select which columns to display">📑 Columns</button>
             <div class="column-selector" id="columnSelector"></div>
@@ -2038,6 +2149,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             <div class="compare-panel" id="compareRightPanel"></div>
         </div>
     </div>
+    <div class="transpose-container" id="transposeContainer">
+        <div class="transpose-table-wrapper" id="transposeTableWrapper">
+            <div class="pivot-placeholder">No data to transpose</div>
+        </div>
+    </div>
     <div class="context-menu" id="contextMenu" style="display:none;"></div>
     <div class="context-menu" id="tabContextMenu" style="display:none;"></div>
     <div class="stats-dialog" id="statsDialog">
@@ -2071,6 +2187,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         let currentFilterText = ''; // Current filter text for cell highlighting
         let isLoading = false; // Track if current tab is loading
         let loadingQuery = ''; // The query text being executed
+        let currentQuery = ''; // The query text for the active tab
         let hiddenColumns = new Set(); // Track which columns are hidden by index
 
         function startTimer() {
@@ -2145,6 +2262,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     clusterUrl = msg.clusterUrl;
                     database = msg.database;
                     isLoading = msg.isLoading || false;
+                    currentQuery = msg.query || '';
                     originalData = msg.activeResult ? JSON.parse(JSON.stringify(msg.activeResult)) : null;
                     currentData = msg.activeResult;
                     // Cache result for this tab (for comparison feature)
@@ -2168,6 +2286,13 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                         hiddenColumns.clear();
                         closeColumnSelector();
                         closePreview(); // Close preview panel when switching tabs
+                        // Reset transpose view
+                        if (transposeVisible) {
+                            transposeVisible = false;
+                            document.getElementById('transposeContainer').classList.remove('visible');
+                            document.getElementById('transposeBtn').classList.remove('active');
+                            document.getElementById('container').style.display = 'block';
+                        }
                         // Restore filter state for the new tab
                         const newFilterText = msg.filterText || '';
                         const newFilterMode = msg.filterMode || 'filter';
@@ -2230,7 +2355,13 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
             // Show loading spinner if this tab is loading
             if (isLoading) {
-                toolbar.style.display = 'none';
+                toolbar.style.display = 'flex';
+                document.getElementById('setQueryBtn').style.display = hasConnection ? 'inline-block' : 'none';
+                document.getElementById('copyQueryBtn').style.display = hasQuery ? 'inline-block' : 'none';
+                document.getElementById('openAdxBtn').style.display = 'none';
+                document.getElementById('openAdoBtn').style.display = 'none';
+                document.getElementById('reRunBtn').style.display = 'none';
+                document.getElementById('clearColorsBtn').style.display = 'none';
                 // Only create loading HTML if not already showing loading state
                 if (!container.querySelector('.loading')) {
                     const elapsed = queryStartTime ? ((Date.now() - queryStartTime) / 1000).toFixed(1) : '0.0';
@@ -2255,6 +2386,12 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             document.getElementById('clearColorsBtn').style.display = colorRules.length > 0 ? 'inline-block' : 'none';
 
             if (!currentData.success) {
+                const querySection = currentQuery
+                    ? '<div class="error-query-section">' +
+                      '<div class="error-query-label">Query</div>' +
+                      '<pre class="error-query-code">' + escapeHtml(currentQuery) + '</pre>' +
+                      '</div>'
+                    : '';
                 container.innerHTML = '<div class="error-container">' +
                     '<div class="error-card">' +
                     '<div class="error-header">' +
@@ -2263,8 +2400,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     '</div>' +
                     '<div class="error-body">' +
                     '<div class="error-message">' + escapeHtml(currentData.error || 'Unknown error') + '</div>' +
+                    querySection +
                     '<div class="error-actions">' +
                     '<button class="error-btn error-btn-secondary" onclick="copyError()">Copy Error</button>' +
+                    (currentQuery ? '<button class="error-btn error-btn-secondary" onclick="suggestFix()">✨ Suggest Fix</button>' : '') +
                     (hasConnection ? '<button class="error-btn error-btn-primary" onclick="reRun()">Retry</button>' : '') +
                     '</div>' +
                     '</div>' +
@@ -2277,6 +2416,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             if (currentData.rows.length === 0) {
                 container.innerHTML = '<div class="empty">No results returned</div>';
                 document.getElementById('status').textContent = '0 rows';
+                if (transposeVisible) { renderTranspose(); }
                 return;
             }
 
@@ -2296,6 +2436,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             }
 
             container.innerHTML = buildTable(currentData.columns, currentData.rows);
+            if (transposeVisible) { renderTranspose(); }
         }
 
         function buildTable(columns, rows) {
@@ -2336,7 +2477,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     // Check if cell matches current filter
                     const cellMatchClass = currentFilterText && cellMatchesFilter(v, currentFilterText) ? ' cell-match' : '';
                     const displayValue = currentFilterText && cellMatchClass ? highlightMatchInCell(v, currentFilterText) : escapeHtml(v);
-                    html += '<td class="' + hlClass + userHlClass + linkClass + cellMatchClass + '" style="' + colorStyle + widthStyle + '" onclick="onCellClick(event,' + ri + ',' + ci + ')" oncontextmenu="showCellContextMenu(event,' + ri + ',' + ci + ')" ondblclick="onCellDblClick(event,' + ri + ',' + ci + ')" title="' + escapeHtml(v) + '">' + displayValue + '</td>';
+                    html += '<td class="' + hlClass + userHlClass + linkClass + cellMatchClass + '" style="' + colorStyle + widthStyle + '" onclick="onCellClick(event,' + ri + ',' + ci + ')" oncontextmenu="showCellContextMenu(event,' + ri + ',' + ci + ')" ondblclick="onCellDblClick(event,' + ri + ',' + ci + ')" title="' + escapeAttr(v) + '">' + displayValue + '</td>';
                 });
                 html += '</tr>';
             });
@@ -2390,6 +2531,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         function clearColorRules() { vscode.postMessage({ command: 'clearColorRules' }); }
         function addColorRule(ci, col, val) { vscode.postMessage({ command: 'addColorRule', columnIndex: ci, columnName: col, cellValue: val }); }
         function copyError() { if (currentData && currentData.error) { vscode.postMessage({ command: 'copyCell', value: currentData.error }); } }
+        function suggestFix() { vscode.postMessage({ command: 'suggestFix', query: currentQuery, error: currentData ? currentData.error : '' }); }
 
         function sortBy(col) {
             if (!currentData) return;
@@ -2656,6 +2798,15 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             const isCtrl = e.ctrlKey || e.metaKey;
             const isShift = e.shiftKey;
 
+            // Single-click opens links (unless modifier key held for selection)
+            if (!isCtrl && !isShift && currentData && currentData.rows[ri]) {
+                const v = String(currentData.rows[ri][ci] ?? '');
+                if (v.startsWith('http://') || v.startsWith('https://')) {
+                    vscode.postMessage({ command: 'openLink', url: v });
+                    return;
+                }
+            }
+
             if (isCtrl) {
                 // Toggle single row selection
                 if (selectedRows.has(ri)) {
@@ -2781,6 +2932,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
             // Build preview content
             let html = '<div class="preview-header"><span>' + headerTitle + '</span><button class="preview-close" onclick="closePreview()">×</button></div>';
+            html += '<div class="preview-filter-bar"><input type="text" class="preview-filter-input" id="previewFilterInput" placeholder="Filter fields..." oninput="filterPreviewRows(this.value)" /></div>';
             html += '<div class="preview-content">';
 
             // For ADO: Get ID and Title for header
@@ -2815,7 +2967,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             if (htmlFieldsContent.length > 0) {
                 html += '<div class="preview-html-fields">';
                 htmlFieldsContent.forEach(field => {
-                    html += '<div class="preview-html-section">';
+                    html += '<div class="preview-html-section preview-filterable" data-search="' + escapeAttr(field.name.toLowerCase() + ' ' + String(field.value).toLowerCase()) + '">';
                     html += '<div class="preview-html-header">' + escapeHtml(field.name) + '</div>';
                     html += '<div class="preview-html-content">' + sanitizeHtml(field.value) + '</div>';
                     html += '</div>';
@@ -2827,9 +2979,10 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             html += '<table class="preview-table">';
             regularFields.forEach(({ col, i, val }) => {
                 const displayVal = val === null || val === undefined ? '<em>null</em>' : escapeHtml(String(val));
+                const searchText = (col.replace('System.', '') + ' ' + (val === null || val === undefined ? '' : String(val))).toLowerCase();
                 // Highlight important fields
                 const isImportant = isAdo && ['state', 'assignedto', 'workitemtype', 'priority', 'severity', 'createddate', 'changeddate'].some(f => col.toLowerCase().includes(f));
-                html += '<tr class="' + (isImportant ? 'important' : '') + '">';
+                html += '<tr class="preview-filterable ' + (isImportant ? 'important' : '') + '" data-search="' + escapeAttr(searchText) + '">';
                 html += '<td class="field-name">' + escapeHtml(col.replace('System.', '')) + '</td>';
                 html += '<td class="field-value">' + displayVal + '</td>';
                 html += '</tr>';
@@ -2860,6 +3013,15 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             if (previewPanel) {
                 previewPanel.style.display = 'none';
             }
+        }
+
+        function filterPreviewRows(text) {
+            if (!previewPanel) return;
+            const filter = text.toLowerCase();
+            previewPanel.querySelectorAll('.preview-filterable').forEach(el => {
+                const search = el.getAttribute('data-search') || '';
+                el.style.display = search.includes(filter) ? '' : 'none';
+            });
         }
 
         function showCellContextMenu(e, ri, ci) {
@@ -3131,6 +3293,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
         function addMenuSep(menu) { const d = document.createElement('div'); d.className = 'context-menu-separator'; menu.appendChild(d); }
         function escapeHtml(t) { if (t == null) return ''; const d = document.createElement('div'); d.textContent = String(t); return d.innerHTML; }
+        function escapeAttr(t) { if (t == null) return ''; return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 document.getElementById('contextMenu').style.display = 'none';
@@ -3332,6 +3495,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 compareVisible = false;
                 document.getElementById('compareContainer').classList.remove('visible');
                 document.getElementById('compareBtn').classList.remove('active');
+                transposeVisible = false;
+                document.getElementById('transposeContainer').classList.remove('visible');
+                document.getElementById('transposeBtn').classList.remove('active');
                 document.getElementById('chartBtn').classList.add('active');
                 renderChart();
             } else {
@@ -3476,6 +3642,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 compareVisible = false;
                 document.getElementById('compareContainer').classList.remove('visible');
                 document.getElementById('compareBtn').classList.remove('active');
+                transposeVisible = false;
+                document.getElementById('transposeContainer').classList.remove('visible');
+                document.getElementById('transposeBtn').classList.remove('active');
                 document.getElementById('pivotBtn').classList.add('active');
                 populatePivotFields();
             } else {
@@ -3628,6 +3797,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             document.getElementById('compareContainer').classList.add('visible');
             chartVisible = false;
             pivotVisible = false;
+            transposeVisible = false;
+            document.getElementById('transposeContainer').classList.remove('visible');
+            document.getElementById('transposeBtn').classList.remove('active');
             document.getElementById('chartBtn').classList.remove('active');
             document.getElementById('pivotBtn').classList.remove('active');
             document.getElementById('compareBtn').classList.add('active');
@@ -3754,6 +3926,121 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 '<span class="stat-removed">◀ ' + leftOnly.size + ' only in left</span> | ' +
                 '<span>' + common.size + ' matching</span> | ' +
                 '<span class="stat-added">' + rightOnly.size + ' only in right ▶</span>';
+        }
+
+        // Transpose view functionality
+        let transposeVisible = false;
+
+        function toggleTranspose() {
+            transposeVisible = !transposeVisible;
+            const container = document.getElementById('container');
+            const transposeContainer = document.getElementById('transposeContainer');
+
+            if (transposeVisible) {
+                container.style.display = 'none';
+                transposeContainer.classList.add('visible');
+                chartVisible = false;
+                document.getElementById('chartContainer').classList.remove('visible');
+                document.getElementById('chartBtn').classList.remove('active');
+                pivotVisible = false;
+                document.getElementById('pivotContainer').classList.remove('visible');
+                document.getElementById('pivotBtn').classList.remove('active');
+                compareVisible = false;
+                document.getElementById('compareContainer').classList.remove('visible');
+                document.getElementById('compareBtn').classList.remove('active');
+                document.getElementById('transposeBtn').classList.add('active');
+                renderTranspose();
+            } else {
+                container.style.display = 'block';
+                transposeContainer.classList.remove('visible');
+                document.getElementById('transposeBtn').classList.remove('active');
+            }
+        }
+
+        function renderTranspose() {
+            const wrapper = document.getElementById('transposeTableWrapper');
+            if (!currentData || !currentData.columns || !currentData.rows || currentData.rows.length === 0) {
+                wrapper.innerHTML = '<div class="pivot-placeholder">No data to transpose</div>';
+                return;
+            }
+
+            const cols = currentData.columns;
+            const rows = currentData.rows;
+
+            let html = '<table class="transpose-table"><thead><tr>';
+            html += '<th class="field-name-header">Field</th>';
+            for (let r = 0; r < rows.length; r++) {
+                html += '<th>Row ' + (r + 1) + '</th>';
+            }
+            html += '</tr></thead><tbody>';
+
+            for (let c = 0; c < cols.length; c++) {
+                html += '<tr>';
+                html += '<td class="field-name" oncontextmenu="showTransposeContextMenu(event,' + c + ',-1)">' + escapeHtml(cols[c]) + '</td>';
+                for (let r = 0; r < rows.length; r++) {
+                    const val = rows[r][c];
+                    html += '<td title="' + escapeAttr(val) + '" oncontextmenu="showTransposeContextMenu(event,' + c + ',' + r + ')" onclick="onTransposeCellClick(event,' + c + ',' + r + ')">' + escapeHtml(val) + '</td>';
+                }
+                html += '</tr>';
+            }
+
+            html += '</tbody></table>';
+            wrapper.innerHTML = html;
+        }
+
+        function onTransposeCellClick(e, fieldIdx, rowIdx) {
+            // Copy cell on double-click handled natively; single click does nothing special
+        }
+
+        function showTransposeContextMenu(e, fieldIdx, rowIdx) {
+            e.preventDefault();
+            const data = currentData;
+            if (!data || !data.columns || !data.rows) return;
+
+            const col = data.columns[fieldIdx];
+            const menu = document.getElementById('contextMenu');
+            menu.innerHTML = '';
+
+            if (rowIdx >= 0) {
+                const v = String(data.rows[rowIdx][fieldIdx] ?? '');
+                addMenuItem(menu, '📋 Copy Cell', () => vscode.postMessage({ command: 'copyCell', value: v }));
+
+                // Copy entire data row as JSON
+                addMenuItem(menu, '📋 Copy Row as JSON', () => {
+                    const obj = {}; data.columns.forEach((c, i) => obj[c] = data.rows[rowIdx][i]);
+                    vscode.postMessage({ command: 'copyRow', value: JSON.stringify(obj, null, 2) });
+                });
+            }
+
+            // Copy entire field (all values for this column)
+            addMenuItem(menu, '📋 Copy Field Values', () => {
+                const vals = data.rows.map(r => String(r[fieldIdx] ?? '')).join('\\n');
+                vscode.postMessage({ command: 'copyColumn', value: vals });
+            });
+
+            addMenuItem(menu, '📋 Copy Field Name', () => {
+                vscode.postMessage({ command: 'copyCell', value: col });
+            });
+
+            // Statistics
+            const nums = data.rows.map(r => parseFloat(r[fieldIdx])).filter(n => !isNaN(n));
+            if (nums.length > 0) {
+                addMenuItem(menu, '📊 Column Stats', () => {
+                    const sum = nums.reduce((a, b) => a + b, 0);
+                    const avg = sum / nums.length;
+                    showStatsDialog(col + ' Statistics',
+                        'Count: ' + nums.length + '\\n' +
+                        'Sum: ' + sum.toLocaleString() + '\\n' +
+                        'Average: ' + avg.toFixed(2) + '\\n' +
+                        'Min: ' + Math.min(...nums).toLocaleString() + '\\n' +
+                        'Max: ' + Math.max(...nums).toLocaleString());
+                });
+            }
+
+            menu.style.display = 'block';
+            menu.style.left = Math.min(e.pageX, window.innerWidth - 220) + 'px';
+            menu.style.top = Math.min(e.pageY, window.innerHeight - 300) + 'px';
+            setTimeout(() => document.addEventListener('click', () => menu.style.display = 'none', { once: true }), 0);
         }
 
         // Column selector functionality
