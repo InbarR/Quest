@@ -458,6 +458,27 @@ namespace MyUtils.AI
         {
             await EnsureCopilotTokenAsync(ct);
 
+            // Confirm the requested model can actually accept images. When it can't,
+            // fall back to one the account is entitled to, because the API reports
+            // the mismatch as an image validation failure rather than a model error.
+            var visionModels = await GetVisionCapableModelsAsync(ct);
+            if (visionModels.Count > 0)
+            {
+                _log($"Vision-capable models available: {string.Join(", ", visionModels)}", true);
+                if (!visionModels.Contains(model, StringComparer.OrdinalIgnoreCase))
+                {
+                    var replacement = visionModels[0];
+                    _log($"Model '{model}' does not support images; using '{replacement}' instead", true);
+                    model = replacement;
+                }
+            }
+            else
+            {
+                _log($"No vision-capable models reported by the API; attempting '{model}' anyway", true);
+            }
+
+            _log($"Vision request using model '{model}', media type '{imageMimeType}'", true);
+
             // Build message with image content
             var imageDataUrl = $"data:{imageMimeType};base64,{imageBase64}";
 
@@ -474,20 +495,20 @@ namespace MyUtils.AI
                     { "role", "user" },
                     { "content", new object[]
                         {
+                            // Text first, mirroring the documented request shape.
+                            new Dictionary<string, object>
+                            {
+                                { "type", "text" },
+                                { "text", userPrompt }
+                            },
                             new Dictionary<string, object>
                             {
                                 { "type", "image_url" },
                                 { "image_url", new Dictionary<string, object>
                                     {
-                                        { "url", imageDataUrl },
-                                        { "detail", "high" }
+                                        { "url", imageDataUrl }
                                     }
                                 }
-                            },
-                            new Dictionary<string, object>
-                            {
-                                { "type", "text" },
-                                { "text", userPrompt }
                             }
                         }
                     }
@@ -593,6 +614,66 @@ namespace MyUtils.AI
                     "o1-mini"
                 };
             }
+        }
+
+        /// <summary>
+        /// Returns the models the account can use that advertise vision support.
+        /// </summary>
+        /// <remarks>
+        /// Vision was previously pinned to a hardcoded "gpt-4o". If the account
+        /// cannot use that model, the request fails during image validation with a
+        /// message that points at the image rather than the model, which is very
+        /// hard to interpret. Asking the API which models accept images avoids
+        /// guessing.
+        /// </remarks>
+        public async Task<List<string>> GetVisionCapableModelsAsync(CancellationToken ct = default)
+        {
+            var models = new List<string>();
+
+            try
+            {
+                await GetCopilotTokenAsync(ct);
+
+                var copilotBaseUrl = GetCopilotBaseUrl();
+                using (var request = new HttpRequestMessage(HttpMethod.Get, $"{copilotBaseUrl}/models"))
+                {
+                    AddCopilotHeaders(request, false);
+
+                    var response = await _httpClient.SendAsync(request, ct);
+                    var responseText = await ReadContentOrThrowAsync(response, "List models", ct);
+
+                    using (var doc = JsonDocument.Parse(responseText))
+                    {
+                        if (doc.RootElement.TryGetProperty("data", out var dataArray) &&
+                            dataArray.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var model in dataArray.EnumerateArray())
+                            {
+                                if (!model.TryGetProperty("id", out var idProp))
+                                    continue;
+
+                                var modelId = idProp.GetString();
+                                if (string.IsNullOrEmpty(modelId))
+                                    continue;
+
+                                if (model.TryGetProperty("capabilities", out var caps) &&
+                                    caps.TryGetProperty("supports", out var supports) &&
+                                    supports.TryGetProperty("vision", out var vision) &&
+                                    vision.ValueKind == JsonValueKind.True)
+                                {
+                                    models.Add(modelId);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"Could not determine vision-capable models: {ex.Message}", true);
+            }
+
+            return models;
         }
 
         #endregion
