@@ -216,10 +216,10 @@ export class ClipboardImageCapture {
             reader.readAsDataURL(blob);
         }
 
-        // The vision API rejects oversized payloads with an opaque 400, and a
-        // full-resolution screenshot easily exceeds the limit once base64 encoded.
-        // Scale the long edge down and, if it is still too big, fall back to JPEG
-        // at progressively lower quality. Text stays legible well below the cap.
+        // The vision API rejects oversized payloads and is picky about media types,
+        // so normalise everything to JPEG at a bounded size. JPEG is accepted
+        // everywhere and stays well under the payload limit; at 1600px the cluster
+        // and database names in a screenshot remain easily legible.
         const MAX_EDGE = 1600;
         const MAX_BASE64_BYTES = 3 * 1024 * 1024;
 
@@ -234,25 +234,27 @@ export class ClipboardImageCapture {
                 canvas.width = w;
                 canvas.height = h;
                 const ctx = canvas.getContext('2d');
+                // JPEG has no alpha channel; fill first so transparent regions
+                // come out white rather than black.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
                 ctx.drawImage(img, 0, 0, w, h);
 
-                let out = canvas.toDataURL('image/png');
-                let outMime = 'image/png';
-                const attempts = [0.85, 0.7, 0.5];
+                let out = canvas.toDataURL('image/jpeg', 0.92);
+                const attempts = [0.8, 0.65, 0.5];
                 let i = 0;
                 while (out.length > MAX_BASE64_BYTES && i < attempts.length) {
                     out = canvas.toDataURL('image/jpeg', attempts[i]);
-                    outMime = 'image/jpeg';
                     i++;
                 }
 
                 log('Resized ' + img.width + 'x' + img.height + ' -> ' + w + 'x' + h +
-                    ' (' + outMime + ', ' + Math.round(out.length / 1024) + ' KB)');
+                    ' (jpeg, ' + Math.round(out.length / 1024) + ' KB)');
 
                 if (out.length > MAX_BASE64_BYTES) {
                     log('Image still large after compression: ' + Math.round(out.length / 1024) + ' KB');
                 }
-                done(out, outMime);
+                done(out, 'image/jpeg');
             };
             img.onerror = () => {
                 log('Could not decode image for resizing, sending original');

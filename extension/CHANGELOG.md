@@ -16,7 +16,7 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Fixed
 
-- **"Add from screenshot" no longer fails with an opaque error.** Screenshots were sent to the vision API at full resolution, which exceeds its payload limit; images are now scaled to a 1600px long edge (and compressed further if still large) before upload
+- **"Add from screenshot" no longer fails with an opaque error.** Screenshots are normalised to JPEG at a 1600px long edge before upload, and the server now identifies the real image format from its magic bytes rather than trusting the clipboard or the file extension — the vision API validates the actual bytes and rejected the whole request when they disagreed. Genuinely unsupported formats now report "Unsupported image format" instead of a raw HTTP error
 - API failures now surface the service's own error text instead of "Response status code does not indicate success". `EnsureSuccessStatusCode` was discarding every response body, so upstream failures were undiagnosable
 - Results columns no longer grow without limit when a row contains a very long value, which made horizontal scrolling nearly unusable ([#2](https://github.com/InbarR/Quest/issues/2)). Columns are capped at 400px by default, configurable via `queryStudio.results.maxColumnWidth` (0 disables the cap); manual resizing still overrides it
 - AI chat panel icon now renders; `resources/ai-light.svg` and `ai-dark.svg` were referenced but had never existed

@@ -143,11 +143,35 @@ public class AiHandler
 
         var systemPrompt = GetExtractionPrompt(request.Mode);
 
+        // The declared media type comes from the clipboard or file picker and is not
+        // always accurate. The vision API sniffs the actual bytes and rejects the
+        // request outright if they don't match a format it supports, so detect the
+        // real format here and correct it rather than trusting the caller.
+        var detectedMimeType = DetectImageMediaType(request.ImageBase64);
+        if (detectedMimeType == null)
+        {
+            _log?.Invoke($"[AI] Unsupported image format (declared {request.ImageMimeType})");
+            return new ExtractedDataSourceInfo(
+                Success: false,
+                ClusterUrl: null,
+                Database: null,
+                DisplayName: null,
+                Organization: null,
+                Type: request.Mode,
+                Error: "Unsupported image format. Use a PNG, JPEG, GIF or WebP screenshot.",
+                Confidence: 0);
+        }
+
+        if (!string.Equals(detectedMimeType, request.ImageMimeType, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Invoke($"[AI] Image declared as {request.ImageMimeType} but is actually {detectedMimeType}; using detected type");
+        }
+
         try
         {
             var result = await _aiHelper.ExtractFromImageAsync(
                 request.ImageBase64,
-                request.ImageMimeType,
+                detectedMimeType,
                 systemPrompt,
                 "Extract the cluster/database information from this screenshot.",
                 0.3f,
@@ -186,6 +210,13 @@ public class AiHandler
                 Confidence: 0);
         }
     }
+
+    /// <summary>
+    /// Identifies an image's real media type from its magic bytes.
+    /// Returns null when the format isn't one the vision API accepts.
+    /// </summary>
+    private static string? DetectImageMediaType(string? base64)
+        => Quest.Server.Services.ImageFormatDetector.DetectMediaType(base64);
 
     private static string GetExtractionPrompt(string mode)
     {
