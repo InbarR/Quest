@@ -482,6 +482,55 @@ namespace MyUtils.AI
             // Build message with image content
             var imageDataUrl = $"data:{imageMimeType};base64,{imageBase64}";
 
+            // Log the leading characters of the data URL. This is the one part of
+            // the request we had never actually observed, and it distinguishes a
+            // malformed or double-prefixed URL from a genuine service rejection.
+            var urlPreview = imageDataUrl.Length > 64 ? imageDataUrl.Substring(0, 64) : imageDataUrl;
+            _log($"Vision image data URL starts: {urlPreview}...", true);
+
+            // Two request shapes are attempted. The object form matches the
+            // documented API; some Copilot proxies instead expect image_url to be
+            // the data URL string directly, and report the mismatch as an
+            // unsupported media type, which is misleading.
+            var shapes = new (string Name, object ImageUrlValue)[]
+            {
+                ("image_url object", new Dictionary<string, object> { { "url", imageDataUrl } }),
+                ("image_url string", imageDataUrl)
+            };
+
+            Exception lastError = null;
+
+            foreach (var shape in shapes)
+            {
+                try
+                {
+                    return await SendVisionRequestAsync(
+                        shape.ImageUrlValue, systemPrompt, userPrompt, model, temperature, ct);
+                }
+                catch (HttpRequestException ex) when (
+                    ex.Message.IndexOf("image", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    _log($"Vision attempt using {shape.Name} was rejected: {ex.Message}", true);
+                    lastError = ex;
+                }
+            }
+
+            throw new HttpRequestException(
+                "The AI endpoint rejected the image. Vision may not be enabled for this Copilot " +
+                $"account or endpoint. Last error: {lastError?.Message}", lastError);
+        }
+
+        /// <summary>
+        /// Issues a single vision completion request with the supplied image_url payload shape.
+        /// </summary>
+        private async Task<string> SendVisionRequestAsync(
+            object imageUrlValue,
+            string systemPrompt,
+            string userPrompt,
+            string model,
+            float temperature,
+            CancellationToken ct)
+        {
             // Build messages as a list of dictionaries for proper JSON serialization
             var messages = new List<object>
             {
@@ -504,11 +553,7 @@ namespace MyUtils.AI
                             new Dictionary<string, object>
                             {
                                 { "type", "image_url" },
-                                { "image_url", new Dictionary<string, object>
-                                    {
-                                        { "url", imageDataUrl }
-                                    }
-                                }
+                                { "image_url", imageUrlValue }
                             }
                         }
                     }
