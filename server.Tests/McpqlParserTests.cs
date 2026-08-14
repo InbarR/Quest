@@ -65,7 +65,8 @@ public class McpqlParserTests
         var query = "api | get_data(limit=50)";
         var result = _parser.Parse(query);
 
-        result.Parameters["limit"].Should().Be("50");
+        // Numeric literals are preserved as numbers so MCP tools receive correctly typed JSON.
+        result.Parameters["limit"].Should().Be(50L);
     }
 
     [Fact]
@@ -74,7 +75,8 @@ public class McpqlParserTests
         var query = "api | get_data(verbose=true)";
         var result = _parser.Parse(query);
 
-        result.Parameters["verbose"].Should().Be("true");
+        // Boolean literals are preserved as booleans so MCP tools receive correctly typed JSON.
+        result.Parameters["verbose"].Should().Be(true);
     }
 
     // ============ Post-Processing Operators ============
@@ -127,7 +129,7 @@ public class McpqlParserTests
         result.Operators[0].Should().BeOfType<McpqlSortOperator>();
         var sort = (McpqlSortOperator)result.Operators[0];
         sort.Column.Should().Be("stars");
-        sort.Descending.Should().BeTrue();
+        sort.Ascending.Should().BeFalse();
     }
 
     [Fact]
@@ -149,7 +151,7 @@ public class McpqlParserTests
         result.Operators.Should().HaveCount(1);
         result.Operators[0].Should().BeOfType<McpqlExtendOperator>();
         var extend = (McpqlExtendOperator)result.Operators[0];
-        extend.NewColumn.Should().Be("doubled");
+        extend.ColumnName.Should().Be("doubled");
         extend.Expression.Should().Be("stars");
     }
 
@@ -186,8 +188,7 @@ public class McpqlParserTests
     public void Format_ProducesReadableOutput()
     {
         var query = "github | list_repos(owner=\"microsoft\") | where stars > 100 | take 5";
-        var parsed = _parser.Parse(query);
-        var formatted = McpqlParser.Format(parsed);
+        var formatted = _parser.Format(query);
 
         formatted.Should().Contain("github");
         formatted.Should().Contain("list_repos");
@@ -200,29 +201,28 @@ public class McpqlParserTests
     [Fact]
     public void Validate_ValidQuery_ReturnsNoErrors()
     {
-        var query = "server | tool(param=\"value\")";
-        var parsed = _parser.Parse(query);
-        var errors = McpqlParser.Validate(parsed);
+        var result = _parser.Validate("server | tool(param=\"value\")");
 
-        errors.Should().BeEmpty();
+        result.IsValid.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
     }
 
     [Fact]
     public void Validate_MissingServerName_ReturnsError()
     {
-        var query = new McpqlQuery { ServerName = "", ToolName = "tool" };
-        var errors = McpqlParser.Validate(query);
+        var result = _parser.Validate("| tool()");
 
-        errors.Should().ContainMatch("*server*");
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("server");
     }
 
     [Fact]
     public void Validate_MissingToolName_ReturnsError()
     {
-        var query = new McpqlQuery { ServerName = "server", ToolName = "" };
-        var errors = McpqlParser.Validate(query);
+        var result = _parser.Validate("server | ");
 
-        errors.Should().ContainMatch("*tool*");
+        result.IsValid.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("tool");
     }
 
     // ============ Error Handling ============

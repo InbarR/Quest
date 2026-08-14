@@ -75,7 +75,7 @@ public class McpqlPostProcessorTests
         var filtered = _processor.Apply(result, operators);
 
         filtered.Rows.Should().HaveCount(1);
-        var nameIdx = filtered.Columns.IndexOf("name");
+        var nameIdx = Array.IndexOf(filtered.Columns, "name");
         filtered.Rows[0][nameIdx].Should().Be("Alice");
     }
 
@@ -170,12 +170,12 @@ public class McpqlPostProcessorTests
 
         var operators = new List<McpqlOperator>
         {
-            new McpqlSortOperator { Column = "name", Descending = false }
+            new McpqlSortOperator { Column = "name", Ascending = true }
         };
 
         var sorted = _processor.Apply(result, operators);
 
-        var nameIdx = sorted.Columns.IndexOf("name");
+        var nameIdx = Array.IndexOf(sorted.Columns, "name");
         sorted.Rows[0][nameIdx].Should().Be("Alice");
         sorted.Rows[1][nameIdx].Should().Be("Bob");
         sorted.Rows[2][nameIdx].Should().Be("Charlie");
@@ -189,12 +189,12 @@ public class McpqlPostProcessorTests
 
         var operators = new List<McpqlOperator>
         {
-            new McpqlSortOperator { Column = "value", Descending = true }
+            new McpqlSortOperator { Column = "value", Ascending = false }
         };
 
         var sorted = _processor.Apply(result, operators);
 
-        var valIdx = sorted.Columns.IndexOf("value");
+        var valIdx = Array.IndexOf(sorted.Columns, "value");
         sorted.Rows[0][valIdx].Should().Be("30");
         sorted.Rows[1][valIdx].Should().Be("20");
         sorted.Rows[2][valIdx].Should().Be("10");
@@ -215,7 +215,7 @@ public class McpqlPostProcessorTests
 
         var counted = _processor.Apply(result, operators);
 
-        counted.Columns.Should().Contain("count");
+        counted.Columns.Should().Contain("Count");
         counted.Rows.Should().HaveCount(1);
         counted.Rows[0][0].Should().Be("3");
     }
@@ -230,13 +230,13 @@ public class McpqlPostProcessorTests
 
         var operators = new List<McpqlOperator>
         {
-            new McpqlExtendOperator { NewColumn = "score_copy", Expression = "score" }
+            new McpqlExtendOperator { ColumnName = "score_copy", Expression = "score" }
         };
 
         var extended = _processor.Apply(result, operators);
 
         extended.Columns.Should().Contain("score_copy");
-        var copyIdx = extended.Columns.IndexOf("score_copy");
+        var copyIdx = Array.IndexOf(extended.Columns, "score_copy");
         extended.Rows[0][copyIdx].Should().Be("90");
     }
 
@@ -257,7 +257,7 @@ public class McpqlPostProcessorTests
                     new() { Column = "score", Operator = ">", Value = "60" }
                 }
             },
-            new McpqlSortOperator { Column = "score", Descending = true },
+            new McpqlSortOperator { Column = "score", Ascending = false },
             new McpqlProjectOperator { Columns = new List<string> { "name" } },
             new McpqlTakeOperator { Count = 1 }
         };

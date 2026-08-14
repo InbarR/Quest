@@ -51,8 +51,11 @@ public class McpDataSourceTests
     [Fact]
     public async Task ConnectAsync_AlwaysSucceeds()
     {
-        var result = await _dataSource.ConnectAsync("any-server", "any-database", CancellationToken.None);
-        result.Should().BeTrue();
+        var result = await _dataSource.ConnectAsync(
+            new DataSourceConnectionParams { Server = "any-server", Database = "any-database" },
+            CancellationToken.None);
+
+        result.Success.Should().BeTrue();
     }
 
     [Fact]
@@ -82,29 +85,37 @@ public class McpDataSourceTests
     // ============ Schema Management ============
 
     [Fact]
-    public void SetToolSchema_StoresTools()
+    public async Task SetToolSchema_StoresTools()
     {
         _dataSource.SetToolSchema("test-server", new[]
         {
-            new McpToolSchemaInfo("list_items", "List all items", Array.Empty<McpToolParameterInfo>()),
-            new McpToolSchemaInfo("get_item", "Get one item", new[] { new McpToolParameterInfo("id", "string", "Item ID", true) })
+            new McpToolSchemaInfo { Name = "list_items", Description = "List all items" },
+            new McpToolSchemaInfo
+            {
+                Name = "get_item",
+                Description = "Get one item",
+                Parameters = new[]
+                {
+                    new McpToolParameterInfo { Name = "id", Type = "string", Description = "Item ID", Required = true }
+                }
+            }
         });
 
-        var entities = _dataSource.GetSchemaEntities("", "");
+        var entities = await _dataSource.GetEntitiesAsync();
         entities.Should().HaveCount(2);
     }
 
     [Fact]
-    public void ClearSchema_RemovesAllTools()
+    public async Task ClearSchema_RemovesAllTools()
     {
         _dataSource.SetToolSchema("server1", new[]
         {
-            new McpToolSchemaInfo("tool1", "desc", Array.Empty<McpToolParameterInfo>())
+            new McpToolSchemaInfo { Name = "tool1", Description = "desc" }
         });
 
         _dataSource.ClearSchema();
 
-        var entities = _dataSource.GetSchemaEntities("", "");
+        var entities = await _dataSource.GetEntitiesAsync();
         entities.Should().BeEmpty();
     }
 
@@ -116,7 +127,7 @@ public class McpDataSourceTests
         var json = "[{\"name\":\"Alice\",\"age\":\"30\"},{\"name\":\"Bob\",\"age\":\"25\"}]";
         var query = "server | tool() | where name == \"Alice\"";
 
-        var result = await _dataSource.ExecuteQueryAsync(query, "mcp-result", json, CancellationToken.None);
+        var result = await _dataSource.ExecuteQueryAsync(McpResultRequest(query, json), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Rows.Should().HaveCount(1);
@@ -125,7 +136,9 @@ public class McpDataSourceTests
     [Fact]
     public async Task ExecuteQueryAsync_WithoutMcpResult_ReturnsMcpInvokeRequired()
     {
-        var result = await _dataSource.ExecuteQueryAsync("server | tool()", "server", "", CancellationToken.None);
+        var result = await _dataSource.ExecuteQueryAsync(
+            new DataSourceQueryRequest { Query = "server | tool()", ClusterUrl = "server", Database = "" },
+            CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Error.Should().StartWith("MCP_INVOKE_REQUIRED:");
@@ -137,7 +150,7 @@ public class McpDataSourceTests
         var json = "[{\"id\":\"1\"},{\"id\":\"2\"},{\"id\":\"3\"}]";
         var query = "server | tool()";
 
-        var result = await _dataSource.ExecuteQueryAsync(query, "mcp-result", json, CancellationToken.None);
+        var result = await _dataSource.ExecuteQueryAsync(McpResultRequest(query, json), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Rows.Should().HaveCount(3);
@@ -149,20 +162,36 @@ public class McpDataSourceTests
         var json = "[{\"id\":\"1\"},{\"id\":\"2\"},{\"id\":\"3\"},{\"id\":\"4\"},{\"id\":\"5\"}]";
         var query = "server | tool() | take 2";
 
-        var result = await _dataSource.ExecuteQueryAsync(query, "mcp-result", json, CancellationToken.None);
+        var result = await _dataSource.ExecuteQueryAsync(McpResultRequest(query, json), CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Rows.Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// The extension transports the raw MCP tool response in the Database field,
+    /// flagged by the sentinel ClusterUrl "mcp-result".
+    /// </summary>
+    private static DataSourceQueryRequest McpResultRequest(string query, string rawJson) => new()
+    {
+        Query = query,
+        ClusterUrl = "mcp-result",
+        Database = rawJson
+    };
+
     // ============ Help ============
 
     [Fact]
-    public void GetHelp_ReturnsHelpText()
+    public void GetQuickStartGuide_ReturnsGuideText()
     {
-        var help = _dataSource.GetHelp();
-        help.Should().NotBeNull();
-        help.Overview.Should().NotBeNullOrWhiteSpace();
+        var guide = _dataSource.GetQuickStartGuide();
+        guide.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void GetDocumentationUrl_ReturnsUrl()
+    {
+        _dataSource.GetDocumentationUrl().Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

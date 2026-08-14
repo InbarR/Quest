@@ -105,13 +105,19 @@ public class QueryHandler : IDisposable
                 }
             }
 
-            // Create query request for the data source
+            // Create query request for the data source.
+            // When the caller doesn't specify a limit, fall back to the data source's own
+            // configured default (e.g. Outlook 500) rather than running unbounded.
+            var defaultMaxResults = dataSource.UIConfig.DefaultMaxResults > 0
+                ? dataSource.UIConfig.DefaultMaxResults
+                : int.MaxValue;
+
             var dsRequest = new DataSourceQueryRequest
             {
                 Query = request.Query,
                 ClusterUrl = request.ClusterUrl,
                 Database = request.Database,
-                MaxResults = (request.MaxResults is null or 0) ? int.MaxValue : request.MaxResults.Value,
+                MaxResults = (request.MaxResults is null or 0) ? defaultMaxResults : request.MaxResults.Value,
                 TimeoutMs = request.Timeout
             };
 

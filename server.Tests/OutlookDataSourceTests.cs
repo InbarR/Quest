@@ -24,9 +24,9 @@ public class OutlookDataSourceTests
     }
 
     [Fact]
-    public void QueryLanguage_ReturnsOutlookSQL()
+    public void QueryLanguage_ReturnsOql()
     {
-        _dataSource.QueryLanguage.Should().Be("Outlook SQL");
+        _dataSource.QueryLanguage.Should().Be("OQL");
     }
 
     [Fact]
@@ -51,18 +51,20 @@ public class OutlookDataSourceTests
         OutlookDataSource.IsSupported.Should().Be(isWindows);
     }
 
-    // CanHandleQuery tests
+    // CanHandleQuery tests.
+    // OQL uses KQL-like pipe syntax (folder name first); the legacy SQL "SELECT ... FROM folder"
+    // form is no longer recognized.
     [Theory]
-    [InlineData("SELECT * FROM Inbox", true)]
-    [InlineData("SELECT * FROM Calendar", true)]
-    [InlineData("SELECT * FROM Contacts", true)]
-    [InlineData("SELECT * FROM Tasks", true)]
-    [InlineData("SELECT * FROM SentMail", true)]
-    [InlineData("select * from inbox", true)] // Case insensitive
     [InlineData("Inbox", true)] // Simple folder name
-    [InlineData("Inbox | subject LIKE '%test%'", true)] // Simplified syntax
-    [InlineData("Calendar | start > '2024-01-01'", true)]
-    [InlineData("// Comment\nSELECT * FROM Inbox", true)] // With comment
+    [InlineData("Calendar", true)]
+    [InlineData("Contacts", true)]
+    [InlineData("Tasks", true)]
+    [InlineData("SentMail", true)]
+    [InlineData("inbox", true)] // Case insensitive
+    [InlineData("Inbox | where Subject contains \"test\"", true)]
+    [InlineData("Calendar | where Start > ago(7d)", true)]
+    [InlineData("// Comment\nInbox | take 10", true)] // With comment
+    [InlineData("SELECT * FROM Inbox", false)] // Legacy SQL syntax no longer supported
     [InlineData("SELECT Id FROM workitems", false)] // ADO query
     [InlineData("TableName | take 10", false)] // Kusto query
     [InlineData(".show tables", false)] // Kusto command
