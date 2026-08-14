@@ -2,8 +2,9 @@ import * as vscode from 'vscode';
 import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, ExtractedClusterItem } from '../sidecar/SidecarClient';
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
 import { setActiveConnection } from './queryCommands';
-import { updateModeStatusBar, getCurrentMode } from '../extension';
+import { updateModeStatusBar, getCurrentMode, logToOutput } from '../extension';
 import { ClipboardImageCapture } from '../providers/ClipboardImageCapture';
+import { extractDataSourceViaLanguageModel } from '../ai/visionExtractor';
 
 export function registerClusterCommands(
     context: vscode.ExtensionContext,
@@ -1115,14 +1116,35 @@ async function addDataSourceFromImage(
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
         title: 'Analyzing screenshot...',
-        cancellable: false
-    }, async (progress) => {
+        cancellable: true
+    }, async (progress, token) => {
+        const extractionMode = mode === 'kusto' ? 'kusto' : 'ado';
+
         try {
+            // Prefer VS Code's language model. It reuses the editor's own Copilot
+            // session, which accepts images, whereas the sidecar's direct REST
+            // endpoint may refuse them entirely depending on the account.
+            progress.report({ message: 'Reading screenshot with Copilot...' });
+            const viaLm = await extractDataSourceViaLanguageModel(
+                client, imageBase64!, mimeType!, extractionMode, logToOutput, token);
+
+            if (viaLm.result?.success) {
+                progress.report({ message: 'Fetching databases...' });
+                await handleExtractedResult(client, clusterProvider, viaLm.result, mode);
+                return;
+            }
+
+            if (viaLm.unavailableReason) {
+                logToOutput(`[Vision] Language model path unavailable: ${viaLm.unavailableReason}`);
+            } else if (viaLm.result) {
+                logToOutput(`[Vision] Language model could not read the screenshot: ${viaLm.result.error}`);
+            }
+
             progress.report({ message: 'Extracting data sources with AI...' });
             const extracted = await client.extractDataSourceFromImage({
                 imageBase64: imageBase64!,
                 imageMimeType: mimeType!,
-                mode: mode === 'kusto' ? 'kusto' : 'ado'
+                mode: extractionMode
             });
 
             if (!extracted.success) {
@@ -1137,7 +1159,7 @@ async function addDataSourceFromImage(
                             const retry = await client.extractDataSourceFromImage({
                                 imageBase64: imageBase64!,
                                 imageMimeType: mimeType!,
-                                mode: mode === 'kusto' ? 'kusto' : 'ado'
+                                mode: extractionMode
                             });
                             if (retry.success) {
                                 progress.report({ message: 'Fetching databases...' });

@@ -119,6 +119,21 @@ public class AiHandler
     }
 
     /// <summary>
+    /// Returns the system prompt used for screenshot extraction.
+    /// Exposed so the extension can run the vision request through VS Code's
+    /// language model API while the prompt stays defined in one place.
+    /// </summary>
+    public string GetExtractionSystemPrompt(string mode) => GetExtractionPrompt(mode);
+
+    /// <summary>
+    /// Parses a vision model's reply into structured data source information.
+    /// Exposed alongside <see cref="GetExtractionSystemPrompt"/> so extension-side
+    /// extraction reuses the same parsing rather than duplicating it.
+    /// </summary>
+    public ExtractedDataSourceInfo ParseExtractionText(string text, string mode)
+        => ParseExtractionResult(text, mode);
+
+    /// <summary>
     /// Extracts data source information (cluster URL, database) from a screenshot using AI vision.
     /// </summary>
     public async Task<ExtractedDataSourceInfo> ExtractDataSourceFromImageAsync(

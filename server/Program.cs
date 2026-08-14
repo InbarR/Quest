@@ -316,6 +316,8 @@ public class SimpleJsonRpcServer
                 "ai/chat" => await AiChatAsync(paramsElement, ct),
                 "ai/generateTitle" => await GenerateTitleAsync(paramsElement, ct),
                 "ai/extractFromImage" => await ExtractFromImageAsync(paramsElement, ct),
+                "ai/extractionPrompt" => GetExtractionPrompt(paramsElement),
+                "ai/parseExtraction" => ParseExtraction(paramsElement),
                 "ai/clearToken" => ClearAiToken(),
                 "ai/setToken" => SetAiToken(paramsElement),
                 "import/kustoExplorer" => ImportKustoExplorerConnections(paramsElement),
@@ -515,6 +517,27 @@ public class SimpleJsonRpcServer
     {
         var request = JsonSerializer.Deserialize<ExtractDataSourceFromImageRequest>(p.GetRawText(), _jsonOptions)!;
         return await _ai.ExtractDataSourceFromImageAsync(request, ct);
+    }
+
+    /// <summary>
+    /// Returns the screenshot extraction prompt so the extension can run the
+    /// vision request through VS Code's language model API.
+    /// </summary>
+    private GetSystemPromptResponse GetExtractionPrompt(JsonElement p)
+    {
+        var mode = p.TryGetProperty("mode", out var m) ? m.GetString() ?? "kusto" : "kusto";
+        return new GetSystemPromptResponse(_ai.GetExtractionSystemPrompt(mode));
+    }
+
+    /// <summary>
+    /// Parses a vision model reply produced by the extension into structured
+    /// data source information, reusing the server-side parser.
+    /// </summary>
+    private ExtractedDataSourceInfo ParseExtraction(JsonElement p)
+    {
+        var text = p.TryGetProperty("text", out var t) ? t.GetString() ?? string.Empty : string.Empty;
+        var mode = p.TryGetProperty("mode", out var m) ? m.GetString() ?? "kusto" : "kusto";
+        return _ai.ParseExtractionText(text, mode);
     }
 
     private ResultHistoryItem[] GetResultHistory(JsonElement p)

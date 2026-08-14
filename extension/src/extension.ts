@@ -42,6 +42,11 @@ export function getLogContent(): string {
     return _logBuffer.join('\n');
 }
 
+/** Writes a line to the Quest output channel from modules that don't hold a reference to it. */
+export function logToOutput(message: string): void {
+    outputChannel?.appendLine(message);
+}
+
 // Export for use by other modules
 export function getCurrentMode(): 'kusto' | 'ado' | 'outlook' | 'mcp' {
     return currentMode;

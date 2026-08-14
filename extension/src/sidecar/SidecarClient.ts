@@ -439,6 +439,17 @@ export class SidecarClient {
         return this.sendRequest('ai/extractFromImage', request, 60000);  // 60s timeout for vision
     }
 
+    /** Screenshot extraction prompt, so vision can run through VS Code's language model API. */
+    async getExtractionPrompt(mode: string): Promise<string> {
+        const result = await this.sendRequest<{ systemPrompt: string }>('ai/extractionPrompt', { mode });
+        return result.systemPrompt;
+    }
+
+    /** Parses a vision model reply using the same server-side parser as the sidecar path. */
+    async parseExtraction(text: string, mode: string): Promise<ExtractedDataSourceInfo> {
+        return this.sendRequest('ai/parseExtraction', { text, mode });
+    }
+
     async clearAiToken(): Promise<{ success: boolean; error?: string }> {
         return this.sendRequest('ai/clearToken', {});
     }
