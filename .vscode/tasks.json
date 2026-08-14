@@ -14,8 +14,20 @@
             "type": "npm",
             "script": "watch",
             "path": "extension",
-            "problemMatcher": "$tsc-watch",
             "isBackground": true,
+            "problemMatcher": {
+                "owner": "typescript",
+                "fileLocation": "absolute",
+                "pattern": {
+                    "regexp": "^✘ \\[ERROR\\] (.+)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^\\[watch\\] build started$",
+                    "endsPattern": "^\\[watch\\] build finished$"
+                }
+            },
             "presentation": {
                 "reveal": "never"
             },
@@ -23,6 +35,14 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "check-types",
+            "type": "npm",
+            "script": "check-types",
+            "path": "extension",
+            "problemMatcher": "$tsc",
+            "group": "build"
         },
         {
             "label": "build-server",

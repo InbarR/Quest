@@ -13,6 +13,7 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Fixed
 
+- AI chat panel icon now renders; `resources/ai-light.svg` and `ai-dark.svg` were referenced but had never existed
 - Query results are no longer unbounded when no `maxResults` is supplied; each data source's configured default (Kusto 10000, MCP 1000, Outlook 500, ADO 200) is now honored
 - MCPQL completion now suggests `and` / `or` after a complete `where` condition
 - Removed redundant `onCommand:` activation events (auto-inferred since VS Code 1.74)

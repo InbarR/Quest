@@ -9,7 +9,7 @@
                 "--extensionDevelopmentPath=${workspaceFolder}/extension"
             ],
             "outFiles": [
-                "${workspaceFolder}/extension/out/**/*.js"
+                "${workspaceFolder}/extension/dist/**/*.js"
             ],
             "preLaunchTask": "build-all",
             "sourceMaps": true
@@ -22,7 +22,7 @@
                 "--extensionDevelopmentPath=${workspaceFolder}/extension"
             ],
             "outFiles": [
-                "${workspaceFolder}/extension/out/**/*.js"
+                "${workspaceFolder}/extension/dist/**/*.js"
             ],
             "sourceMaps": true
         },

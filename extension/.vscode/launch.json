@@ -9,9 +9,10 @@
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ],
             "outFiles": [
-                "${workspaceFolder}/out/**/*.js"
+                "${workspaceFolder}/dist/**/*.js"
             ],
-            "preLaunchTask": "npm: compile"
+            "preLaunchTask": "npm: compile",
+            "sourceMaps": true
         },
         {
             "name": "Run Extension (No Build)",
@@ -21,8 +22,9 @@
                 "--extensionDevelopmentPath=${workspaceFolder}"
             ],
             "outFiles": [
-                "${workspaceFolder}/out/**/*.js"
-            ]
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "sourceMaps": true
         }
     ]
 }
