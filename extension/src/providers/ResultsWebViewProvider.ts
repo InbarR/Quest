@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { QueryResult } from '../sidecar/SidecarClient';
+import { ICON_STYLES } from './webviewIcons';
 
 interface ColorRule {
     columnIndex: number;
@@ -888,6 +889,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>Query Results</title>
     <style>
+        ${ICON_STYLES}
         :root { --quest-max-col-width: ${maxColumnWidth}; }
         * { box-sizing: border-box; }
         body {
@@ -966,6 +968,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             row-gap: 6px;
         }
         .toolbar button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             background: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
             border: 1px solid transparent;
@@ -974,9 +979,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             border-radius: 4px;
             font-size: 11px;
             line-height: 18px;
+            font-family: inherit;
             white-space: nowrap;
             transition: background 60ms ease, border-color 60ms ease;
         }
+        .toolbar .qi { font-size: 13px; }
         .toolbar button:hover {
             background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
             border-color: var(--vscode-widget-border, transparent);
@@ -2126,39 +2133,39 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         <span class="status" id="status"></span>
         <span class="status" id="duration" style="color: var(--vscode-charts-green, #4ec9b0);"></span>
         <div class="separator"></div>
-        <button id="setQueryBtn" onclick="setQuery()">⬆ Set Query</button>
-        <button id="copyQueryBtn" onclick="copyQuery()">📋 Copy</button>
-        <button id="openAdxBtn" onclick="openInAdx()">🌐 ADX</button>
-        <button id="openAdoBtn" onclick="openInAdo()">🌐 ADO</button>
-        <button id="reRunBtn" onclick="reRun()">🔄 Re-Run</button>
+        <button id="setQueryBtn" onclick="setQuery()"><span class="qi qi-set-query"></span>Set Query</button>
+        <button id="copyQueryBtn" onclick="copyQuery()"><span class="qi qi-copy"></span>Copy</button>
+        <button id="openAdxBtn" onclick="openInAdx()"><span class="qi qi-open-external"></span>ADX</button>
+        <button id="openAdoBtn" onclick="openInAdo()"><span class="qi qi-open-external"></span>ADO</button>
+        <button id="reRunBtn" onclick="reRun()"><span class="qi qi-rerun"></span>Re-Run</button>
         <div class="separator"></div>
-        <button onclick="exportCsv()">💾 Save Result</button>
-        <button onclick="toggleChart()" id="chartBtn" title="Toggle chart view">📊 Chart</button>
-        <button onclick="togglePivot()" id="pivotBtn" title="Toggle pivot table view">🔀 Pivot</button>
-        <button onclick="startCompare()" id="compareBtn" title="Compare two result tabs">⚖️ Compare</button>
-        <button onclick="toggleTranspose()" id="transposeBtn" title="Toggle transpose view (fields as rows)">↔ Transpose</button>
+        <button onclick="exportCsv()"><span class="qi qi-save"></span>Save Result</button>
+        <button onclick="toggleChart()" id="chartBtn" title="Toggle chart view"><span class="qi qi-chart"></span>Chart</button>
+        <button onclick="togglePivot()" id="pivotBtn" title="Toggle pivot table view"><span class="qi qi-pivot"></span>Pivot</button>
+        <button onclick="startCompare()" id="compareBtn" title="Compare two result tabs"><span class="qi qi-compare"></span>Compare</button>
+        <button onclick="toggleTranspose()" id="transposeBtn" title="Toggle transpose view (fields as rows)"><span class="qi qi-transpose"></span>Transpose</button>
         <div class="column-btn-wrapper">
-            <button onclick="toggleColumnSelector(event)" id="columnsBtn" title="Select which columns to display">📑 Columns</button>
+            <button onclick="toggleColumnSelector(event)" id="columnsBtn" title="Select which columns to display"><span class="qi qi-columns"></span>Columns</button>
             <div class="column-selector" id="columnSelector"></div>
         </div>
         <div class="column-btn-wrapper">
-            <button onclick="togglePresetMenu(event)" id="presetBtn" title="Column layout presets">📐 Presets</button>
+            <button onclick="togglePresetMenu(event)" id="presetBtn" title="Column layout presets"><span class="qi qi-presets"></span>Presets</button>
             <div class="column-selector preset-menu" id="presetMenu">
                 <div class="preset-header">
                     <span style="font-weight:600;">Column Presets</span>
-                    <button onclick="saveCurrentPreset()" class="preset-action" title="Save current layout">💾 Save</button>
+                    <button onclick="saveCurrentPreset()" class="preset-action" title="Save current layout"><span class="qi qi-save"></span>Save</button>
                 </div>
                 <div id="presetList" class="preset-list"></div>
             </div>
         </div>
-        <button onclick="clearColorRules()" id="clearColorsBtn" style="display:none;" title="Clear all color rules">🎨 Clear Colors</button>
+        <button onclick="clearColorRules()" id="clearColorsBtn" style="display:none;" title="Clear all color rules"><span class="qi qi-clear-colors"></span>Clear Colors</button>
         <div class="filter-group">
-            <span style="font-size:11px;">🔍</span>
+            <span class="qi qi-search" style="opacity:0.7;"></span>
             <input type="text" class="filter-input" id="filterInput" placeholder="F12 to filter" oninput="debounceFilter(this.value)" title="Filter: text (all cols), col::val (column filter), ::col (highlight), !pat (exclude)">
-            <button onclick="showFilterHelp()" style="padding:2px 6px;" title="Filter syntax help">?</button>
-            <button onclick="toggleFilterMode()" id="filterModeBtn" style="padding:2px 6px;" title="Mode: Filter rows (click to switch to Highlight)">🔽</button>
-            <button onclick="clearFilter()" style="padding:2px 4px;">✕</button>
-            <button onclick="searchAllTabs()" style="padding:2px 6px;" title="Search across all result tabs">🔎 All</button>
+            <button onclick="showFilterHelp()" style="padding:3px 7px;" title="Filter syntax help">?</button>
+            <button onclick="toggleFilterMode()" id="filterModeBtn" style="padding:3px 7px;" title="Mode: Filter rows (click to switch to Highlight)"><span class="qi qi-filter"></span></button>
+            <button onclick="clearFilter()" style="padding:3px 7px;" title="Clear filter"><span class="qi qi-close"></span></button>
+            <button onclick="searchAllTabs()" style="padding:3px 7px;" title="Search across all result tabs"><span class="qi qi-search"></span>All</button>
         </div>
     </div>
     <div class="container" id="container">
@@ -2388,7 +2395,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                         // Update filter mode button
                         const filterModeBtn = document.getElementById('filterModeBtn');
                         if (filterModeBtn) {
-                            filterModeBtn.textContent = filterMode === 'filter' ? '🔽' : '🖌️';
+                            filterModeBtn.innerHTML = filterMode === 'filter'
+                                ? '<span class="qi qi-filter"></span>'
+                                : '<span class="qi qi-clear-colors"></span>';
                             filterModeBtn.title = filterMode === 'filter' ? 'Mode: Filter rows (click to switch to Highlight)' : 'Mode: Highlight rows (click to switch to Filter)';
                         }
                         // Apply the filter if there's text
@@ -2478,7 +2487,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 container.innerHTML = '<div class="error-container">' +
                     '<div class="error-card">' +
                     '<div class="error-header">' +
-                    '<div class="error-icon">✕</div>' +
+                    '<div class="error-icon"><span class="qi qi-error"></span></div>' +
                     '<span class="error-title">Query Failed</span>' +
                     '</div>' +
                     '<div class="error-body">' +
@@ -2486,7 +2495,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     querySection +
                     '<div class="error-actions">' +
                     '<button class="error-btn error-btn-secondary" onclick="copyError()">Copy Error</button>' +
-                    (currentQuery ? '<button class="error-btn error-btn-secondary" onclick="suggestFix()">✨ Suggest Fix</button>' : '') +
+                    (currentQuery ? '<button class="error-btn error-btn-secondary" onclick="suggestFix()"><span class="qi qi-sparkle"></span> Suggest Fix</button>' : '') +
                     (hasConnection ? '<button class="error-btn error-btn-primary" onclick="reRun()">Retry</button>' : '') +
                     '</div>' +
                     '</div>' +
@@ -2832,7 +2841,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         function toggleFilterMode() {
             filterMode = filterMode === 'filter' ? 'highlight' : 'filter';
             const btn = document.getElementById('filterModeBtn');
-            btn.textContent = filterMode === 'filter' ? '🔽' : '🖌️';
+            btn.innerHTML = filterMode === 'filter'
+                ? '<span class="qi qi-filter"></span>'
+                : '<span class="qi qi-clear-colors"></span>';
             btn.title = filterMode === 'filter' ? 'Mode: Filter rows (click to switch to Highlight)' : 'Mode: Highlight rows (click to switch to Filter)';
             // Re-apply current filter
             const text = document.getElementById('filterInput').value;

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SidecarClient, PresetInfo } from '../sidecar/SidecarClient';
+import { SHARED_STYLES } from './webviewTheme';
 
 export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'querystudio.presets';
@@ -88,6 +89,7 @@ export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        ${SHARED_STYLES}
         body {
             padding: 0;
             margin: 0;
@@ -96,40 +98,32 @@ export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
             color: var(--vscode-foreground);
         }
         .search-box {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             padding: 6px 8px;
             position: sticky;
             top: 0;
+            z-index: 1;
             background: var(--vscode-sideBar-background);
             border-bottom: 1px solid var(--vscode-panel-border);
         }
+        .search-box .qi { font-size: 13px; opacity: 0.6; }
         .search-input {
-            width: 100%;
-            padding: 4px 8px;
+            flex: 1;
+            min-width: 0;
+            padding: 3px 8px;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
             font-size: 12px;
+            font-family: inherit;
             box-sizing: border-box;
         }
         .search-input:focus {
-            outline: 1px solid var(--vscode-focusBorder);
-        }
-        .list {
-            padding: 0;
-        }
-        .item {
-            display: flex;
-            align-items: center;
-            padding: 4px 8px;
-            cursor: pointer;
-        }
-        .item:hover {
-            background: var(--vscode-list-hoverBackground);
-        }
-        .item-content {
-            flex: 1;
-            min-width: 0;
+            outline: none;
+            border-color: var(--vscode-focusBorder);
         }
         .item-name {
             white-space: nowrap;
@@ -141,46 +135,16 @@ export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
             font-size: 10px;
             color: var(--vscode-descriptionForeground);
             text-transform: uppercase;
-        }
-        .item-delete {
-            opacity: 0;
-            padding: 2px 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .item:hover .item-delete {
-            opacity: 0.6;
-        }
-        .item-delete:hover {
-            opacity: 1 !important;
-            background: var(--vscode-toolbar-hoverBackground);
-            border-radius: 3px;
-        }
-        .empty {
-            padding: 16px;
-            text-align: center;
-            color: var(--vscode-descriptionForeground);
-            font-size: 12px;
-        }
-        .welcome {
-            padding: 16px;
-            text-align: center;
-        }
-        .welcome a {
-            color: var(--vscode-textLink-foreground);
-            cursor: pointer;
-            text-decoration: none;
-        }
-        .welcome a:hover {
-            text-decoration: underline;
+            letter-spacing: 0.04em;
         }
     </style>
 </head>
 <body>
     <div class="search-box">
+        <span class="qi qi-search"></span>
         <input type="text" class="search-input" placeholder="Filter favorites..." id="searchInput" oninput="filter(this.value)">
     </div>
-    <div class="list" id="list"></div>
+    <div class="q-list" id="list"></div>
 
     <script>
         const vscode = acquireVsCodeApi();
@@ -208,21 +172,23 @@ export class FavoritesWebViewProvider implements vscode.WebviewViewProvider {
 
             if (presets.length === 0) {
                 if (allPresets.length === 0) {
-                    list.innerHTML = '<div class="welcome">No favorites yet.<br><br>Run a query and click ⭐ Save to add favorites.</div>';
+                    list.innerHTML = '<div class="q-empty"><span class="qi qi-star"></span><div>No favorites yet</div><small>Run a query and save it to add one.</small></div>';
                 } else {
-                    list.innerHTML = '<div class="empty">No matches</div>';
+                    list.innerHTML = '<div class="q-empty"><span class="qi qi-search"></span><div>No matches</div></div>';
                 }
                 return;
             }
 
             list.innerHTML = presets.map(p => {
                 const typeName = p.type === 'kusto' ? 'KQL' : p.type === 'ado' ? 'WIQL' : p.type === 'outlook' ? 'OQL' : p.type;
-                return \`<div class="item" onclick="load('\${p.id}')" title="\${escapeHtml(p.query.substring(0, 200))}">
-                    <div class="item-content">
+                return \`<div class="q-row" onclick="load('\${p.id}')" title="\${escapeHtml(p.query.substring(0, 200))}">
+                    <div class="q-row-main">
                         <div class="item-name">\${escapeHtml(p.name)}</div>
                         <div class="item-type">\${typeName}</div>
                     </div>
-                    <span class="item-delete" onclick="event.stopPropagation(); del('\${p.id}')" title="Delete">×</span>
+                    <div class="q-row-actions">
+                        <button class="q-icon-btn" onclick="event.stopPropagation(); del('\${p.id}')" title="Delete"><span class="qi qi-trash"></span></button>
+                    </div>
                 </div>\`;
             }).join('');
         }
