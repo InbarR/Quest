@@ -6,6 +6,7 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Changed
 
+- **Results panel visual refresh** - lighter grid (horizontal rules instead of a full box around every cell), clearer sticky header, larger and more legible cell text, rounded toolbar buttons with hover and focus states, active-tab accent, close buttons that stay hidden until a tab is hovered, and a filter field that grows into a proper search bar
 - **Bundled with esbuild** - The extension now ships as a single minified file (`dist/extension.js`) instead of 35 separate modules, significantly reducing activation time
 - **No longer steals the sidebar on startup** - Quest previously force-focused its own view container on every activation
 - **MCP discovery is now lazy** - Tool discovery and its retry timer only start when MCP servers are configured or MCP mode is selected

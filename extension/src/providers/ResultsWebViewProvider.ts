@@ -911,20 +911,27 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         .tab {
             display: flex;
             align-items: center;
-            padding: 6px 12px;
+            padding: 7px 12px;
             cursor: pointer;
             border-right: 1px solid var(--vscode-panel-border);
             white-space: nowrap;
             font-size: 12px;
             max-width: 200px;
             gap: 6px;
+            color: var(--vscode-tab-inactiveForeground, var(--vscode-descriptionForeground));
+            /* Reserve the active accent up front so switching tabs doesn't
+               shift the row by a pixel. */
+            border-top: 2px solid transparent;
+            transition: background 60ms ease, color 60ms ease;
         }
         .tab:hover {
-            background: var(--vscode-tab-hoverBackground);
+            background: var(--vscode-tab-hoverBackground, var(--vscode-list-hoverBackground));
+            color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
         }
         .tab.active {
             background: var(--vscode-tab-activeBackground);
-            border-bottom: 2px solid var(--vscode-focusBorder);
+            color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
+            border-top-color: var(--vscode-focusBorder);
         }
         .tab-icon {
             opacity: 0.7;
@@ -935,36 +942,48 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             text-overflow: ellipsis;
         }
         .tab-close {
-            opacity: 0.6;
+            opacity: 0;
             font-size: 14px;
             padding: 0 2px;
+            border-radius: 4px;
+            line-height: 1;
         }
+        /* Keep the close affordance out of the way until the tab is in play. */
+        .tab:hover .tab-close, .tab.active .tab-close { opacity: 0.6; }
         .tab-close:hover {
             opacity: 1;
-            background: var(--vscode-toolbar-hoverBackground);
-            border-radius: 3px;
+            background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
         }
         .toolbar {
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-bottom: 1px solid var(--vscode-panel-border);
             display: flex;
-            gap: 4px;
+            gap: 6px;
             align-items: center;
             background-color: var(--vscode-panel-background);
             flex-wrap: wrap;
             flex-shrink: 0;
+            row-gap: 6px;
         }
         .toolbar button {
             background: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
-            border: none;
-            padding: 2px 6px;
+            border: 1px solid transparent;
+            padding: 3px 9px;
             cursor: pointer;
-            border-radius: 2px;
+            border-radius: 4px;
             font-size: 11px;
+            line-height: 18px;
+            white-space: nowrap;
+            transition: background 60ms ease, border-color 60ms ease;
         }
         .toolbar button:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
+            background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+            border-color: var(--vscode-widget-border, transparent);
+        }
+        .toolbar button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 1px;
         }
         .toolbar button.active {
             background: var(--vscode-button-background);
@@ -972,29 +991,37 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
         .separator {
             width: 1px;
-            height: 14px;
+            height: 16px;
             background: var(--vscode-panel-border);
-            margin: 0 2px;
+            margin: 0 3px;
         }
         .status {
             color: var(--vscode-descriptionForeground);
             font-size: 11px;
             margin-right: 6px;
+            font-variant-numeric: tabular-nums;
         }
         .filter-group {
             display: flex;
             align-items: center;
-            gap: 3px;
+            gap: 4px;
             margin-left: auto;
+            padding-left: 8px;
+            /* Grow into the free space so the filter reads as a deliberate
+               search bar instead of an orphaned control when the toolbar wraps. */
+            flex: 1 1 260px;
+            min-width: 240px;
         }
         .filter-input {
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            padding: 2px 6px;
-            border-radius: 2px;
-            width: 160px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            flex: 1 1 auto;
+            min-width: 100px;
             font-size: 11px;
+            line-height: 18px;
         }
         .filter-input:focus {
             outline: 1px solid var(--vscode-focusBorder);
@@ -1026,11 +1053,15 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             border-collapse: separate;
             border-spacing: 0;
             table-layout: auto;
-            font-size: 11px;
+            font-size: 12px;
+            line-height: 1.35;
         }
         th, td {
-            border: 1px solid var(--vscode-panel-border);
-            padding: 3px 8px;
+            /* Horizontal rules only. A full 1px box around every cell reads as a
+               dense spreadsheet grid and competes with the data itself. */
+            border: none;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            padding: 3px 10px;
             text-align: left;
             white-space: nowrap;
             overflow: hidden;
@@ -1049,8 +1080,15 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             font-weight: 600;
             user-select: none;
             z-index: 2;
-            border-bottom: 2px solid var(--vscode-panel-border);
+            color: var(--vscode-foreground);
+            letter-spacing: 0.02em;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            /* Keeps the header legible once rows scroll underneath it. */
+            box-shadow: inset 0 -1px 0 var(--vscode-panel-border), 0 1px 3px rgba(0,0,0,0.25);
         }
+        /* Light separators between headers only, to delineate columns without
+           drawing a full grid over the data. */
+        th + th { box-shadow: inset 1px 0 0 var(--vscode-panel-border), inset 0 -1px 0 var(--vscode-panel-border), 0 1px 3px rgba(0,0,0,0.25); }
         th:hover { background: var(--vscode-list-hoverBackground); }
         th.dragging { opacity: 0.5; }
         th.drag-over { border-left: 2px solid var(--vscode-focusBorder); }
@@ -1409,7 +1447,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         tr.user-highlight { background: rgba(0, 150, 200, 0.35) !important; }
         tr.user-highlight td { border-left: 3px solid #00bcd4; }
         td { cursor: pointer; }
-        td:hover { background: var(--vscode-editor-selectionBackground); }
+        /* A soft inset ring marks the hovered cell without repainting it in the
+           selection colour, which used to overpower the row hover state. */
+        td:hover { box-shadow: inset 0 0 0 1px var(--vscode-focusBorder); }
         td.highlight { background: var(--vscode-editor-findMatchHighlightBackground) !important; }
         td.col-highlight { background: rgba(138, 43, 226, 0.25) !important; }
         td.link { color: var(--vscode-textLink-foreground); text-decoration: underline; }
@@ -1915,7 +1955,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             justify-content: center;
             align-items: center;
             height: 100%;
+            gap: 6px;
             color: var(--vscode-descriptionForeground);
+            text-align: center;
         }
         .footer {
             display: flex;
