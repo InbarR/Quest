@@ -51,7 +51,7 @@ function formatKqlDocument(document: vscode.TextDocument): vscode.TextEdit[] {
     const text = document.getText();
 
     // Simple formatting rules
-    let formatted = text
+    const formatted = text
         // Ensure pipes are on new lines
         .replace(/\s*\|\s*/g, '\n| ')
         // Clean up multiple spaces

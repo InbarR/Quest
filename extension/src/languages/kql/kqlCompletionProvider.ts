@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SidecarClient, CompletionItem as SidecarCompletionItem } from '../../sidecar/SidecarClient';
+import { SidecarClient } from '../../sidecar/SidecarClient';
 import { getActiveConnection } from '../../commands/queryCommands';
 
 // KQL Keywords
@@ -59,8 +59,8 @@ export class KqlCompletionProvider implements vscode.CompletionItemProvider {
     async provideCompletionItems(
         document: vscode.TextDocument,
         position: vscode.Position,
-        token: vscode.CancellationToken,
-        context: vscode.CompletionContext
+        _token: vscode.CancellationToken,
+        _context: vscode.CompletionContext
     ): Promise<vscode.CompletionItem[]> {
         console.log('[KQL Completion] provideCompletionItems called');
         const items: vscode.CompletionItem[] = [];

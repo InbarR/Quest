@@ -26,7 +26,7 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
         this._view = webviewView;
@@ -138,7 +138,7 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
             const config = vscode.workspace.getConfiguration('queryStudio');
             const retentionDays = config.get<number>('resultsHistory.retentionDays', 14);
 
-            let history = await this._client.getResultHistory(100);
+            const history = await this._client.getResultHistory(100);
 
             // Filter by current mode
             this._history = history.filter(r => r.type === this._currentMode);

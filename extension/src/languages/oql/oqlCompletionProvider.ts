@@ -133,8 +133,8 @@ export class OqlCompletionProvider implements vscode.CompletionItemProvider {
     provideCompletionItems(
         document: vscode.TextDocument,
         position: vscode.Position,
-        token: vscode.CancellationToken,
-        context: vscode.CompletionContext
+        _token: vscode.CancellationToken,
+        _context: vscode.CompletionContext
     ): vscode.CompletionItem[] {
         const items: vscode.CompletionItem[] = [];
         const linePrefix = document.lineAt(position).text.substring(0, position.character);

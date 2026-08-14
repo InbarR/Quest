@@ -267,7 +267,7 @@ export class McpQueryExecutor implements vscode.Disposable {
             if (eqIndex < 0) continue;
 
             const key = part.substring(0, eqIndex).trim();
-            let value = part.substring(eqIndex + 1).trim();
+            const value = part.substring(eqIndex + 1).trim();
 
             // Parse value type
             if ((value.startsWith("'") && value.endsWith("'")) ||

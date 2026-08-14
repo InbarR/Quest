@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { SidecarClient } from '../../sidecar/SidecarClient';
 import { WiqlCompletionProvider } from './wiqlCompletionProvider';
 
-export function registerWiqlLanguage(context: vscode.ExtensionContext, client: SidecarClient) {
+export function registerWiqlLanguage(context: vscode.ExtensionContext, _client: SidecarClient) {
     // Register completion provider for all schemes
     const completionProvider = new WiqlCompletionProvider();
     const schemes = ['file', 'untitled', 'vscode-userdata'];
@@ -34,7 +34,7 @@ function formatWiqlDocument(document: vscode.TextDocument): vscode.TextEdit[] {
     const text = document.getText();
 
     // Simple formatting rules for WIQL
-    let formatted = text
+    const formatted = text
         // Uppercase keywords
         .replace(/\b(select|from|where|order by|group by|asof|mode|and|or|not|in|ever|under|contains|asc|desc)\b/gi,
             match => match.toUpperCase())

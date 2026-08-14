@@ -2,6 +2,21 @@
 
 All notable changes to the "Quest" extension will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **Bundled with esbuild** - The extension now ships as a single minified file (`dist/extension.js`) instead of 35 separate modules, significantly reducing activation time
+- **No longer steals the sidebar on startup** - Quest previously force-focused its own view container on every activation
+- **MCP discovery is now lazy** - Tool discovery and its retry timer only start when MCP servers are configured or MCP mode is selected
+- **Marketplace icon optimized** - 1024x1024 / 997 KB reduced to 256x256 / 29 KB
+
+### Fixed
+
+- Query results are no longer unbounded when no `maxResults` is supplied; each data source's configured default (Kusto 10000, MCP 1000, Outlook 500, ADO 200) is now honored
+- MCPQL completion now suggests `and` / `or` after a complete `where` condition
+- Removed redundant `onCommand:` activation events (auto-inferred since VS Code 1.74)
+
 ## [0.6.2] - 2026-02-15
 
 ### Added

@@ -1151,8 +1151,8 @@ export function registerQueryCommands(
             }
 
             // Update active connection
-            let clusterUrl = preset.clusterUrl;
-            let database = preset.database;
+            const clusterUrl = preset.clusterUrl;
+            const database = preset.database;
 
             // If preset has cluster info, use it
             if (clusterUrl && database) {
@@ -1608,7 +1608,7 @@ interface RuleQuickPickItem extends vscode.QuickPickItem {
 async function showRuleEditorQuickPick(
     client: SidecarClient,
     ruleName: string,
-    outputChannel: vscode.OutputChannel
+    _outputChannel: vscode.OutputChannel
 ): Promise<void> {
     const details = await client.getRuleDetails(ruleName);
     if (!details.success) {

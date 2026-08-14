@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, ExtractedClusterItem, KustoExplorerConnection } from '../sidecar/SidecarClient';
+import { SidecarClient, ClusterInfo, ExtractedDataSourceInfo, ExtractedClusterItem } from '../sidecar/SidecarClient';
 import { ClusterTreeProvider } from '../providers/ClusterTreeProvider';
 import { setActiveConnection } from './queryCommands';
 import { updateModeStatusBar, getCurrentMode } from '../extension';

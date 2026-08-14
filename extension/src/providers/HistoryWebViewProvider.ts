@@ -20,7 +20,7 @@ export class HistoryWebViewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
         this._view = webviewView;
@@ -76,7 +76,7 @@ export class HistoryWebViewProvider implements vscode.WebviewViewProvider {
         if (!this._view) return;
 
         try {
-            let history = await this._client.getHistory(100);
+            const history = await this._client.getHistory(100);
             // Filter by current mode
             this._history = history.filter(p => (p.type || 'kusto') === this._currentMode);
             this._view.webview.postMessage({

@@ -73,7 +73,7 @@ function formatMcpqlDocument(document: vscode.TextDocument): vscode.TextEdit[] {
     const text = document.getText();
 
     // Formatting rules for MCPQL
-    let formatted = text
+    const formatted = text
         // Ensure post-processing pipes are on new lines (but not the first pipe in source)
         .replace(/\)\s*\|\s*(where|project|take|sort|count|extend)\b/g, ')\n| $1')
         .replace(/\|\s*(where|project|take|sort|count|extend)\b/g, '\n| $1')

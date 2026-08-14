@@ -124,7 +124,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken
     ) {
         this._view = webviewView;
@@ -432,7 +432,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _addColorRule(columnIndex: number, columnName: string, cellValue?: string) {
+    private async _addColorRule(columnIndex: number, columnName: string, _cellValue?: string) {
         const activeTab = this._tabs.find(t => t.id === this._activeTabId);
         if (!activeTab || !activeTab.result.success) return;
 
@@ -508,7 +508,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _showJsonDocument(json: string, title: string) {
+    private async _showJsonDocument(json: string, _title: string) {
         try {
             // Try to parse and format JSON
             const parsed = JSON.parse(json);

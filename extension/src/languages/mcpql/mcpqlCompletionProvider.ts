@@ -128,6 +128,11 @@ export class McpqlCompletionProvider implements vscode.CompletionItemProvider {
             return this.getExtendCompletions();
         }
 
+        // After a complete where condition — suggest logical operators to chain conditions
+        if (this.isAfterWhereCondition(linePrefix)) {
+            return this.getLogicalOperatorCompletions();
+        }
+
         // After a field name — suggest comparison operators
         if (this.isAfterColumnName(linePrefix, fullText)) {
             return this.getComparisonOperatorCompletions();
@@ -229,11 +234,21 @@ export class McpqlCompletionProvider implements vscode.CompletionItemProvider {
         return { server, tool: toolName, usedParams };
     }
 
-    private isAfterColumnName(linePrefix: string, fullText: string): boolean {
+    private isAfterColumnName(linePrefix: string, _fullText: string): boolean {
         // After a word followed by space in a where context
         if (linePrefix.match(/\|\s*where\s+.+\s+(and|or)\s+\w+\s+$/i)) return true;
         if (linePrefix.match(/\|\s*where\s+\w+\s+$/i)) return true;
         return false;
+    }
+
+    /**
+     * True when the cursor sits after a complete `column op value` condition,
+     * where chaining with `and` / `or` is the natural next token.
+     */
+    private isAfterWhereCondition(linePrefix: string): boolean {
+        const comparison = '(==|!=|>=|<=|>|<|contains|startswith|endswith|has|matches)';
+        const value = '("[^"]*"|\'[^\']*\'|[\\w.-]+)';
+        return new RegExp(`\\|\\s*where\\s+.*\\w+\\s+${comparison}\\s+${value}\\s+$`, 'i').test(linePrefix);
     }
 
     // ---- Completion generators ----
@@ -326,6 +341,15 @@ export class McpqlCompletionProvider implements vscode.CompletionItemProvider {
     private getComparisonOperatorCompletions(): vscode.CompletionItem[] {
         return COMPARISON_OPERATORS.map(op => {
             const item = new vscode.CompletionItem(op.name, vscode.CompletionItemKind.Operator);
+            item.detail = op.description;
+            item.sortText = '0' + op.name;
+            return item;
+        });
+    }
+
+    private getLogicalOperatorCompletions(): vscode.CompletionItem[] {
+        return LOGICAL_OPERATORS.map(op => {
+            const item = new vscode.CompletionItem(op.name, vscode.CompletionItemKind.Keyword);
             item.detail = op.description;
             item.sortText = '0' + op.name;
             return item;

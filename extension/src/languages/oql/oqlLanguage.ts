@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { SidecarClient } from '../../sidecar/SidecarClient';
 import { OqlCompletionProvider } from './oqlCompletionProvider';
 
-export function registerOqlLanguage(context: vscode.ExtensionContext, client: SidecarClient) {
+export function registerOqlLanguage(context: vscode.ExtensionContext, _client: SidecarClient) {
     // Register completion provider for all schemes
     // Note: Not specifying trigger characters allows VS Code to show completions as user types
     // We register with specific triggers for pipe/space context, plus a general provider for typing
@@ -59,7 +59,7 @@ function formatOqlDocument(document: vscode.TextDocument): vscode.TextEdit[] {
     const text = document.getText();
 
     // Simple formatting rules for OQL (KQL-like)
-    let formatted = text
+    const formatted = text
         // Ensure pipes are on new lines
         .replace(/\s*\|\s*/g, '\n| ')
         // Clean up multiple spaces
