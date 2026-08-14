@@ -30,6 +30,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     private _activeTabId: string | null = null;
     private _tabCounter = 0;
     private _loadingTabId: string | null = null;
+    private _configListener?: vscode.Disposable;
 
     private _onSaveAsPreset?: (query: string, title: string) => void;
     private _onSetQuery?: (query: string, clusterUrl: string, database: string) => void;
@@ -140,10 +141,38 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             this._handleMessage(message);
         });
 
+        // Apply changes to the column width cap live, without rebuilding the
+        // webview HTML (which would discard the currently displayed results).
+        this._configListener?.dispose();
+        this._configListener = vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('queryStudio.results.maxColumnWidth')) {
+                this._view?.webview.postMessage({
+                    command: 'setMaxColumnWidth',
+                    value: ResultsWebViewProvider._getMaxColumnWidth()
+                });
+            }
+        });
+
         // If we have pending tabs, update the view now that it's available
         if (this._tabs.length > 0) {
             this._updateView();
         }
+    }
+
+    /**
+     * Resolve the configured results column width cap as a CSS length.
+     * Returns 'none' when the user has disabled the limit with 0.
+     */
+    private static _getMaxColumnWidth(): string {
+        const configured = vscode.workspace
+            .getConfiguration('queryStudio')
+            .get<number>('results.maxColumnWidth', 400);
+        return configured > 0 ? `${configured}px` : 'none';
+    }
+
+    public dispose() {
+        this._configListener?.dispose();
+        this._configListener = undefined;
     }
 
     private _handleMessage(message: any) {
@@ -848,6 +877,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
+        // 0 (or negative) disables the cap and restores the previous grow-to-fit behaviour.
+        const maxColumnWidth = ResultsWebViewProvider._getMaxColumnWidth();
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -856,6 +888,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>Query Results</title>
     <style>
+        :root { --quest-max-col-width: ${maxColumnWidth}; }
         * { box-sizing: border-box; }
         body {
             padding: 0;
@@ -1002,6 +1035,11 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            /* Cap the natural width so one long value can't stretch a column
+               to thousands of pixels and make horizontal scrolling unusable.
+               Explicit per-column widths set by dragging the resize handle are
+               applied inline and therefore still win over this default. */
+            max-width: var(--quest-max-col-width, 400px);
         }
         th {
             background: var(--vscode-editor-background, #1e1e1e);
@@ -2215,6 +2253,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         window.addEventListener('message', event => {
             const msg = event.data;
             switch (msg.command) {
+                case 'setMaxColumnWidth':
+                    document.documentElement.style.setProperty('--quest-max-col-width', msg.value);
+                    break;
                 case 'showLoading':
                     // Check if we should replace an existing tab or create a new one
                     if (msg.replaceTab) {

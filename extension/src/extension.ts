@@ -154,7 +154,8 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.registerWebviewViewProvider(ResultsHistoryWebViewProvider.viewType, resultsHistoryProvider),
         vscode.window.registerWebviewViewProvider(SnippetsWebViewProvider.viewType, snippetsProvider),
         vscode.window.registerWebviewViewProvider(AIChatViewProvider.viewType, aiChatProvider, { webviewOptions: { retainContextWhenHidden: true } }),
-        vscode.window.registerWebviewViewProvider(ResultsWebViewProvider.viewType, resultsProvider, { webviewOptions: { retainContextWhenHidden: true } })
+        vscode.window.registerWebviewViewProvider(ResultsWebViewProvider.viewType, resultsProvider, { webviewOptions: { retainContextWhenHidden: true } }),
+        { dispose: () => resultsProvider.dispose() }
     );
 
     // Set up callbacks (fast, no I/O)

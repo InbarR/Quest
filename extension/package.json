@@ -982,6 +982,12 @@
           "default": true,
           "description": "Open query results in a new tab (true) or replace the current results tab (false)"
         },
+        "queryStudio.results.maxColumnWidth": {
+          "type": "number",
+          "default": 400,
+          "minimum": 0,
+          "description": "Maximum default width, in pixels, of a results column. Prevents a single long value from stretching a column and making horizontal scrolling difficult. Columns can still be resized manually by dragging. Set to 0 to disable the limit."
+        },
         "queryStudio.autoSaveHistory": {
           "type": "boolean",
           "default": true,
