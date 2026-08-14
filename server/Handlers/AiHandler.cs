@@ -180,6 +180,21 @@ public class AiHandler
             _log?.Invoke($"[AI] Vision result received ({result?.Length ?? 0} chars)");
             return ParseExtractionResult(result, request.Mode);
         }
+        catch (Exception ex) when (ex is MyUtils.AI.VisionNotSupportedException
+            || ex.InnerException is MyUtils.AI.VisionNotSupportedException)
+        {
+            var message = (ex as MyUtils.AI.VisionNotSupportedException ?? ex.InnerException)!.Message;
+            _log?.Invoke($"[AI] {message}");
+            return new ExtractedDataSourceInfo(
+                Success: false,
+                ClusterUrl: null,
+                Database: null,
+                DisplayName: null,
+                Organization: null,
+                Type: request.Mode,
+                Error: message,
+                Confidence: 0);
+        }
         catch (Exception ex) when (ex is MyUtils.AI.DeviceCodeAuthRequiredException
             || ex.InnerException is MyUtils.AI.DeviceCodeAuthRequiredException
             || ex.Message.Contains("Device code authentication required", StringComparison.OrdinalIgnoreCase)

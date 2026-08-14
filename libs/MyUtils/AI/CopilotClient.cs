@@ -13,6 +13,18 @@ using System.Threading.Tasks;
 namespace MyUtils.AI
 {
     /// <summary>
+    /// Thrown when the AI endpoint will not accept image input at all, as opposed
+    /// to rejecting a particular image.
+    /// </summary>
+    public class VisionNotSupportedException : Exception
+    {
+        public VisionNotSupportedException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
+
+    /// <summary>
     /// Exception thrown when device code authentication is required.
     /// </summary>
     public class DeviceCodeAuthRequiredException : Exception
@@ -482,42 +494,29 @@ namespace MyUtils.AI
             // Build message with image content
             var imageDataUrl = $"data:{imageMimeType};base64,{imageBase64}";
 
-            // Log the leading characters of the data URL. This is the one part of
-            // the request we had never actually observed, and it distinguishes a
-            // malformed or double-prefixed URL from a genuine service rejection.
+            // Log the leading characters of the data URL so a malformed or
+            // double-prefixed URL can be distinguished from a service-side refusal.
             var urlPreview = imageDataUrl.Length > 64 ? imageDataUrl.Substring(0, 64) : imageDataUrl;
             _log($"Vision image data URL starts: {urlPreview}...", true);
 
-            // Two request shapes are attempted. The object form matches the
-            // documented API; some Copilot proxies instead expect image_url to be
-            // the data URL string directly, and report the mismatch as an
-            // unsupported media type, which is misleading.
-            var shapes = new (string Name, object ImageUrlValue)[]
+            try
             {
-                ("image_url object", new Dictionary<string, object> { { "url", imageDataUrl } }),
-                ("image_url string", imageDataUrl)
-            };
-
-            Exception lastError = null;
-
-            foreach (var shape in shapes)
-            {
-                try
-                {
-                    return await SendVisionRequestAsync(
-                        shape.ImageUrlValue, systemPrompt, userPrompt, model, temperature, ct);
-                }
-                catch (HttpRequestException ex) when (
-                    ex.Message.IndexOf("image", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    _log($"Vision attempt using {shape.Name} was rejected: {ex.Message}", true);
-                    lastError = ex;
-                }
+                return await SendVisionRequestAsync(
+                    new Dictionary<string, object> { { "url", imageDataUrl } },
+                    systemPrompt, userPrompt, model, temperature, ct);
             }
-
-            throw new HttpRequestException(
-                "The AI endpoint rejected the image. Vision may not be enabled for this Copilot " +
-                $"account or endpoint. Last error: {lastError?.Message}", lastError);
+            catch (HttpRequestException ex) when (
+                ex.Message.IndexOf("media type", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // A well-formed data URL carrying a supported format still gets this
+                // response from endpoints that don't accept image input at all. The
+                // model list can advertise vision because it describes the upstream
+                // models rather than what the proxy itself implements.
+                throw new VisionNotSupportedException(
+                    "This AI endpoint does not accept images. 'Add from screenshot' requires a " +
+                    "Copilot endpoint with vision support; enter the cluster details manually instead.",
+                    ex);
+            }
         }
 
         /// <summary>
