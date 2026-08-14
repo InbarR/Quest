@@ -125,7 +125,8 @@ public class AiHandler
         ExtractDataSourceFromImageRequest request,
         CancellationToken ct)
     {
-        _log?.Invoke($"[AI] ExtractDataSourceFromImage - Mode: {request.Mode}");
+        _log?.Invoke($"[AI] ExtractDataSourceFromImage - Mode: {request.Mode}, " +
+            $"image: {request.ImageMimeType}, {(request.ImageBase64?.Length ?? 0) / 1024} KB base64");
 
         if (_aiHelper == null)
         {

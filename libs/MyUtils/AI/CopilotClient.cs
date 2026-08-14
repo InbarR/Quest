@@ -100,9 +100,7 @@ namespace MyUtils.AI
                 request.Headers.Add("Accept", "application/json");
 
                 var response = await _httpClient.SendAsync(request, ct);
-                response.EnsureSuccessStatusCode();
-
-                var responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await ReadContentOrThrowAsync(response, "Device code request", ct);
                 var deviceCode = JsonSerializer.Deserialize<DeviceCodeResponse>(responseText);
                 
                 return deviceCode;
@@ -426,9 +424,7 @@ namespace MyUtils.AI
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request, ct);
-                response.EnsureSuccessStatusCode();
-
-                var responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await ReadContentOrThrowAsync(response, "Chat completion", ct);
                 using (var doc = JsonDocument.Parse(responseText))
                 {
                     if (doc.RootElement.TryGetProperty("choices", out var choices) &&
@@ -519,9 +515,7 @@ namespace MyUtils.AI
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request, ct);
-                response.EnsureSuccessStatusCode();
-
-                var responseText = await response.Content.ReadAsStringAsync();
+                var responseText = await ReadContentOrThrowAsync(response, "Vision completion", ct);
                 using (var doc = JsonDocument.Parse(responseText))
                 {
                     if (doc.RootElement.TryGetProperty("choices", out var choices) &&
@@ -558,9 +552,7 @@ namespace MyUtils.AI
                     AddCopilotHeaders(request, false);
 
                     var response = await _httpClient.SendAsync(request, ct);
-                    response.EnsureSuccessStatusCode();
-
-                    var responseText = await response.Content.ReadAsStringAsync();
+                    var responseText = await ReadContentOrThrowAsync(response, "List models", ct);
 
                     // Parse the response to extract model IDs
                     var models = new List<string>();
@@ -648,6 +640,65 @@ namespace MyUtils.AI
 
             if (vision)
                 request.Headers.Add("copilot-vision-request", "true");
+        }
+
+        /// <summary>
+        /// Reads the response body, throwing an exception that includes the API's own
+        /// error text when the request failed.
+        /// <para>
+        /// EnsureSuccessStatusCode discards the body, which reduced every upstream
+        /// failure to "Response status code does not indicate success" and made
+        /// problems like an oversized vision payload impossible to diagnose.
+        /// </para>
+        /// </summary>
+        private static async Task<string> ReadContentOrThrowAsync(
+            HttpResponseMessage response,
+            string operation,
+            CancellationToken ct)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
+                return body;
+
+            var detail = ExtractApiErrorMessage(body);
+            var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" - {detail}";
+            throw new HttpRequestException(
+                $"{operation} failed: {(int)response.StatusCode} {response.ReasonPhrase}{suffix}");
+        }
+
+        /// <summary>
+        /// Pulls a human-readable message out of an API error body, falling back to a
+        /// truncated copy of the raw body when it isn't the shape we expect.
+        /// </summary>
+        private static string ExtractApiErrorMessage(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+                return string.Empty;
+
+            try
+            {
+                using (var doc = JsonDocument.Parse(body))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("error", out var error))
+                    {
+                        if (error.ValueKind == JsonValueKind.String)
+                            return error.GetString();
+                        if (error.ValueKind == JsonValueKind.Object &&
+                            error.TryGetProperty("message", out var msg))
+                            return msg.GetString();
+                    }
+                    if (root.TryGetProperty("message", out var topMsg))
+                        return topMsg.GetString();
+                }
+            }
+            catch (JsonException)
+            {
+                // Not JSON - fall through and return the raw text.
+            }
+
+            var trimmed = body.Trim();
+            return trimmed.Length > 400 ? trimmed.Substring(0, 400) + "..." : trimmed;
         }
 
         #endregion

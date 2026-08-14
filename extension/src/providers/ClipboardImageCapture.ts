@@ -198,13 +198,15 @@ export class ClipboardImageCapture {
             const reader = new FileReader();
             reader.onload = () => {
                 log('FileReader loaded successfully');
-                currentImageData = reader.result;
-                currentMimeType = mimeType;
-                document.getElementById('placeholder').style.display = 'none';
-                document.getElementById('preview').innerHTML = '<img src="' + currentImageData + '">';
-                document.getElementById('buttons').style.display = 'block';
-                document.querySelector('.paste-area').classList.add('has-image');
-                setStatus('Image ready! Click "Use This Image" or press Enter', '');
+                downscaleImage(reader.result, mimeType, (dataUrl, finalMime) => {
+                    currentImageData = dataUrl;
+                    currentMimeType = finalMime;
+                    document.getElementById('placeholder').style.display = 'none';
+                    document.getElementById('preview').innerHTML = '<img src="' + currentImageData + '">';
+                    document.getElementById('buttons').style.display = 'block';
+                    document.querySelector('.paste-area').classList.add('has-image');
+                    setStatus('Image ready! Click "Use This Image" or press Enter', '');
+                });
             };
             reader.onerror = (err) => {
                 log('FileReader error: ' + err);
@@ -212,6 +214,51 @@ export class ClipboardImageCapture {
                 vscode.postMessage({ type: 'error', error: 'Failed to read image file' });
             };
             reader.readAsDataURL(blob);
+        }
+
+        // The vision API rejects oversized payloads with an opaque 400, and a
+        // full-resolution screenshot easily exceeds the limit once base64 encoded.
+        // Scale the long edge down and, if it is still too big, fall back to JPEG
+        // at progressively lower quality. Text stays legible well below the cap.
+        const MAX_EDGE = 1600;
+        const MAX_BASE64_BYTES = 3 * 1024 * 1024;
+
+        function downscaleImage(dataUrl, mimeType, done) {
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+
+                let out = canvas.toDataURL('image/png');
+                let outMime = 'image/png';
+                const attempts = [0.85, 0.7, 0.5];
+                let i = 0;
+                while (out.length > MAX_BASE64_BYTES && i < attempts.length) {
+                    out = canvas.toDataURL('image/jpeg', attempts[i]);
+                    outMime = 'image/jpeg';
+                    i++;
+                }
+
+                log('Resized ' + img.width + 'x' + img.height + ' -> ' + w + 'x' + h +
+                    ' (' + outMime + ', ' + Math.round(out.length / 1024) + ' KB)');
+
+                if (out.length > MAX_BASE64_BYTES) {
+                    log('Image still large after compression: ' + Math.round(out.length / 1024) + ' KB');
+                }
+                done(out, outMime);
+            };
+            img.onerror = () => {
+                log('Could not decode image for resizing, sending original');
+                done(dataUrl, mimeType);
+            };
+            img.src = dataUrl;
         }
 
         // Handle paste
