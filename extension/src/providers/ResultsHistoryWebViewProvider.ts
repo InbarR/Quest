@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SidecarClient, ResultHistoryItem } from '../sidecar/SidecarClient';
+import { SHARED_STYLES } from './webviewTheme';
 
 export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'querystudio.resultsHistory';
@@ -170,6 +171,7 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        ${SHARED_STYLES}
         body {
             padding: 0;
             margin: 0;
@@ -184,44 +186,32 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
             background: var(--vscode-sideBar-background);
             border-bottom: 1px solid var(--vscode-panel-border);
             display: flex;
-            gap: 4px;
+            gap: 6px;
             align-items: center;
             z-index: 1;
         }
+        .search-box > .qi { font-size: 13px; opacity: 0.6; }
         .search-input {
             flex: 1;
-            padding: 4px 8px;
+            min-width: 0;
+            padding: 3px 8px;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
             font-size: 12px;
+            font-family: inherit;
             box-sizing: border-box;
         }
-        .toolbar-btn {
-            padding: 4px 6px;
-            background: transparent;
-            color: var(--vscode-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 11px;
-            opacity: 0.7;
-        }
-        .toolbar-btn:hover {
-            opacity: 1;
-            background: var(--vscode-toolbar-hoverBackground);
-        }
         .search-input:focus {
-            outline: 1px solid var(--vscode-focusBorder);
-        }
-        .list {
-            padding: 0;
+            outline: none;
+            border-color: var(--vscode-focusBorder);
         }
         .item {
-            padding: 6px 8px;
+            padding: 6px 10px;
             cursor: pointer;
             border-bottom: 1px solid var(--vscode-panel-border);
+            transition: background 60ms ease;
         }
         .item:hover {
             background: var(--vscode-list-hoverBackground);
@@ -309,8 +299,9 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
 </head>
 <body>
     <div class="search-box">
+        <span class="qi qi-search"></span>
         <input type="text" class="search-input" placeholder="Filter results..." id="searchInput" oninput="filter()">
-        <button class="toolbar-btn" onclick="clearAll()" title="Clear all saved results">🗑</button>
+        <button class="q-icon-btn" onclick="clearAll()" title="Clear all saved results"><span class="qi qi-trash"></span></button>
     </div>
     <div class="stats" id="stats"></div>
     <div class="list" id="list"></div>
@@ -359,9 +350,9 @@ export class ResultsHistoryWebViewProvider implements vscode.WebviewViewProvider
 
             if (items.length === 0) {
                 if (allHistory.length === 0) {
-                    list.innerHTML = '<div class="empty">No results yet.<br><br>Run queries to see results history.</div>';
+                    list.innerHTML = '<div class="q-empty"><span class="qi qi-history"></span><div>No results yet</div><small>Run a query to build results history.</small></div>';
                 } else {
-                    list.innerHTML = '<div class="empty">No matches</div>';
+                    list.innerHTML = '<div class="q-empty"><span class="qi qi-search"></span><div>No matches</div></div>';
                 }
                 return;
             }

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SidecarClient } from '../sidecar/SidecarClient';
+import { SHARED_STYLES } from './webviewTheme';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
@@ -463,7 +464,14 @@ export class AIChatPanel {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>QS Chat</title>
     <style>
+        ${SHARED_STYLES}
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* Keep glyph and label aligned in buttons that now carry icons */
+        .icon-btn, .quick-btn, .query-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
         body {
             font-family: var(--vscode-font-family);
             font-size: 13px;
@@ -753,7 +761,7 @@ export class AIChatPanel {
             <span class="status-dot"></span>
         </span>
         <div class="header-actions">
-            <button class="icon-btn" onclick="clearChat()" title="Clear chat">🧹</button>
+            <button class="icon-btn" onclick="clearChat()" title="Clear chat"><span class="qi qi-clear-colors"></span></button>
         </div>
     </div>
     <div class="context-bar" id="contextBar">
@@ -767,7 +775,7 @@ export class AIChatPanel {
     <div class="input-area">
         <div class="quick-actions">
             <button class="quick-btn" onclick="quickAction('fix')">🔧 Fix</button>
-            <button class="quick-btn" onclick="quickAction('improve')">✨ Improve</button>
+            <button class="quick-btn" onclick="quickAction('improve')"><span class="qi qi-sparkle"></span> Improve</button>
             <button class="quick-btn" onclick="quickAction('explain')">📖 Explain</button>
         </div>
         <div class="input-wrapper">
@@ -896,7 +904,7 @@ export class AIChatPanel {
             return \`
                 <div class="query-actions">
                     <button class="primary query-btn" data-action="apply" data-query="\${encodedQuery}">▶ Use Query</button>
-                    <button class="query-btn" data-action="copy" data-query="\${encodedQuery}">📋 Copy</button>
+                    <button class="query-btn" data-action="copy" data-query="\${encodedQuery}"><span class="qi qi-copy"></span> Copy</button>
                 </div>
             \`;
         }

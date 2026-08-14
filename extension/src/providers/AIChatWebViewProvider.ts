@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { SidecarClient } from '../sidecar/SidecarClient';
+import { SHARED_STYLES } from './webviewTheme';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
@@ -323,7 +324,14 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>QS Chat</title>
     <style>
+        ${SHARED_STYLES}
         * { box-sizing: border-box; }
+        /* Keep glyph and label aligned in buttons that now carry icons */
+        .clear-btn, .quick-actions button, .query-actions button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
         body {
             padding: 0;
             margin: 0;
@@ -550,7 +558,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
     <div class="header">
         <span class="header-icon">AI</span>
         <span>Quest AI Assistant</span>
-        <button class="clear-btn" onclick="clearChat()" title="Clear chat">🧹</button>
+        <button class="clear-btn" onclick="clearChat()" title="Clear chat"><span class="qi qi-clear-colors"></span></button>
     </div>
     <div class="chat-container" id="chatContainer">
         <div class="welcome" id="welcome">
@@ -563,9 +571,9 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
     <div class="input-container">
         <div class="quick-actions">
             <button onclick="quickAction('fix')">🔧 Fix Query</button>
-            <button onclick="quickAction('improve')">✨ Improve</button>
+            <button onclick="quickAction('improve')"><span class="qi qi-sparkle"></span> Improve</button>
             <button onclick="quickAction('explain')">📖 Explain</button>
-            <button onclick="quickAction('comment')">💬 Add Comments</button>
+            <button onclick="quickAction('comment')"><span class="qi qi-chat"></span> Add Comments</button>
         </div>
         <div class="input-row">
             <textarea id="messageInput" placeholder="Ask me about KQL or WIQL queries..." rows="2"></textarea>
@@ -661,7 +669,7 @@ export class AIChatWebViewProvider implements vscode.WebviewViewProvider {
                 <div class="query-actions">
                     <button class="primary" onclick="applyQuery('\${escapedQuery}')">▶ Apply Query</button>
                     <button onclick="insertQuery('\${escapedQuery}')">📝 Insert</button>
-                    <button onclick="copyQuery('\${escapedQuery}')">📋 Copy</button>
+                    <button onclick="copyQuery('\${escapedQuery}')"><span class="qi qi-copy"></span> Copy</button>
                 </div>
             \`;
         }

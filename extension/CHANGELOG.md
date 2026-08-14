@@ -6,8 +6,8 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Changed
 
-- **Codicon-style icons replace emoji** in the results toolbar and sidebar panels, so Quest matches VS Code's own iconography. Icons are inlined as CSS masks and inherit the theme colour, adding roughly 19 KB to the package rather than the ~184 KB a webfont would cost
-- **Shared webview styling** - buttons, inputs, list rows, empty states and scrollbars now come from one module, so the panels stop drifting apart visually
+- **Codicon-style icons replace emoji** across the results toolbar, context menus, sidebar panels and AI chat surfaces, so Quest matches VS Code's own iconography. Icons are inlined as CSS masks and inherit the theme colour, adding roughly 19 KB to the package rather than the ~184 KB a webfont would cost
+- **Shared webview styling** - buttons, inputs, list rows, empty states and scrollbars now come from one module used by every panel, so they stop drifting apart
 - **Results panel visual refresh** - lighter grid (horizontal rules instead of a full box around every cell), clearer sticky header, larger and more legible cell text, rounded toolbar buttons with hover and focus states, active-tab accent, close buttons that stay hidden until a tab is hovered, and a filter field that grows into a proper search bar
 - **Bundled with esbuild** - The extension now ships as a single minified file (`dist/extension.js`) instead of 35 separate modules, significantly reducing activation time
 - **No longer steals the sidebar on startup** - Quest previously force-focused its own view container on every activation

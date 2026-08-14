@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { SHARED_STYLES } from './webviewTheme';
 
 export interface Snippet {
     id: string;
@@ -631,6 +632,7 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        ${SHARED_STYLES}
         body {
             padding: 0;
             margin: 0;
@@ -642,34 +644,50 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
             padding: 6px 8px;
             position: sticky;
             top: 0;
+            z-index: 1;
             background: var(--vscode-sideBar-background);
             border-bottom: 1px solid var(--vscode-panel-border);
             display: flex;
             gap: 6px;
+            align-items: center;
         }
+        .toolbar > .qi { font-size: 13px; opacity: 0.6; }
         .toolbar input {
             flex: 1;
-            padding: 4px 8px;
+            min-width: 0;
+            padding: 3px 8px;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 4px;
             font-size: 12px;
+            font-family: inherit;
         }
         .toolbar input:focus {
-            outline: 1px solid var(--vscode-focusBorder);
+            outline: none;
+            border-color: var(--vscode-focusBorder);
         }
         .toolbar button {
-            padding: 4px 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            border-radius: 2px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 11px;
+            line-height: 18px;
+            font-family: inherit;
+            white-space: nowrap;
         }
         .toolbar button:hover {
             background: var(--vscode-button-hoverBackground);
+        }
+        .toolbar button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 1px;
         }
         .category {
             margin-bottom: 4px;
@@ -774,8 +792,9 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
     <div class="toolbar">
+        <span class="qi qi-search"></span>
         <input type="text" id="search" placeholder="Search snippets..." oninput="filter(this.value)">
-        <button onclick="saveNew()" title="Save selection as snippet">+ Save</button>
+        <button onclick="saveNew()" title="Save selection as snippet"><span class="qi qi-add"></span>Save</button>
     </div>
     <div class="mode-indicator" id="modeIndicator"></div>
     <div id="list"></div>
@@ -825,7 +844,7 @@ export class SnippetsWebViewProvider implements vscode.WebviewViewProvider {
             const categories = Object.keys(grouped).sort();
 
             if (categories.length === 0) {
-                list.innerHTML = '<div class="empty">No snippets found</div>';
+                list.innerHTML = '<div class="q-empty"><span class="qi qi-file"></span><div>No snippets found</div></div>';
                 return;
             }
 

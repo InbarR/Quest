@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { SidecarClient } from '../sidecar/SidecarClient';
 import { getActiveConnection } from '../commands/queryCommands';
 import { McpToolDiscovery } from '../mcp/McpToolDiscovery';
+import { SHARED_STYLES } from './webviewTheme';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
@@ -1133,7 +1134,14 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
     <title>AI Chat</title>
     <style>
+        ${SHARED_STYLES}
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* Keep glyph and label on the same baseline now that these carry icons */
+        .persona-btn, .persona-settings-btn, .new-chat-btn, .query-btn, .cluster-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
         body {
             font-family: var(--vscode-font-family);
             font-size: 12px;
@@ -1698,12 +1706,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
         <div class="header-actions">
             <div class="persona-selector">
                 <button class="persona-btn" id="personaBtn" onclick="selectPersona()" title="Click to change AI persona">
-                    <span class="persona-icon">🤖</span>
+                    <span class="persona-icon qi qi-chat"></span>
                     <span class="persona-name">Default</span>
                 </button>
-                <button class="persona-settings-btn" onclick="managePersonas()" title="Create or manage AI personas">⚙</button>
+                <button class="persona-settings-btn" onclick="managePersonas()" title="Create or manage AI personas"><span class="qi qi-gear"></span></button>
             </div>
-            <button class="new-chat-btn" onclick="clearChat()" title="Start a new chat conversation">+ New</button>
+            <button class="new-chat-btn" onclick="clearChat()" title="Start a new chat conversation"><span class="qi qi-add"></span>New</button>
         </div>
     </div>
     <div class="context-bar" id="contextBar">
@@ -1959,12 +1967,12 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             const nameSpan = btn.querySelector('.persona-name');
             if (currentPersona && currentPersona.name) {
                 if (nameSpan) nameSpan.textContent = currentPersona.name;
-                if (iconSpan) iconSpan.textContent = '✨';
+                if (iconSpan) iconSpan.className = 'persona-icon qi qi-sparkle';
                 btn.classList.add('active');
                 btn.title = 'Current persona: ' + currentPersona.name + '. Click to change.';
             } else {
                 if (nameSpan) nameSpan.textContent = 'Default';
-                if (iconSpan) iconSpan.textContent = '🤖';
+                if (iconSpan) iconSpan.className = 'persona-icon qi qi-chat';
                 btn.classList.remove('active');
                 btn.title = 'Click to select an AI persona';
             }
@@ -2107,7 +2115,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
                 const displayName = clusterName || clusterUrl;
                 clusterChip = \`
                     <div class="cluster-chip" data-cluster="\${encodedCluster}" data-database="\${encodedDb}" data-query="\${encodedQuery}" title="Click to select this data source">
-                        <span class="icon">⚡</span>
+                        <span class="icon qi qi-globe"></span>
                         <span class="cluster-name">\${escapeHtml(displayName)}</span>
                         <span class="db-name">/ \${escapeHtml(database)}</span>
                     </div>
@@ -2117,7 +2125,7 @@ export class AIChatViewProvider implements vscode.WebviewViewProvider {
             return \`
                 \${clusterChip}
                 <div class="query-actions">
-                    <button class="primary query-btn" data-action="run" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}">▶ Run</button>
+                    <button class="primary query-btn" data-action="run" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}"><span class="qi qi-play"></span> Run</button>
                     <button class="query-btn" data-action="apply" data-query="\${encodedQuery}" data-cluster="\${encodedCluster}" data-database="\${encodedDb}">Use</button>
                     <button class="query-btn" data-action="copy" data-query="\${encodedQuery}">Copy</button>
                 </div>

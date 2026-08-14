@@ -1925,9 +1925,12 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             cursor: pointer;
             font-size: 11px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 8px;
         }
+        /* Indent label-only items so they line up with the icon-bearing ones */
+        .context-menu-item > span:first-child:not(.qi) { margin-left: 21px; }
+        .context-menu-item .qi { font-size: 13px; opacity: 0.85; }
         .context-menu-item:hover {
             background: var(--vscode-menu-selectionBackground);
         }
@@ -3378,10 +3381,46 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             setTimeout(() => document.addEventListener('click', () => menu.style.display = 'none', { once: true }), 0);
         }
 
+        // Maps the leading emoji of a menu label to a codicon. Handling it here
+        // rather than at each call site keeps every menu consistent and avoids
+        // touching two dozen addMenuItem calls.
+        const MENU_ICONS = {
+            '👁️': 'eye', '👁': 'eye',
+            '🗑️': 'trash', '🗑': 'trash',
+            '📝': 'edit', '✏️': 'edit', '✏': 'edit',
+            '🔗': 'open-external',
+            '📧': 'open-external',
+            '📊': 'chart',
+            '🧹': 'clear-colors',
+            '❌': 'error', '✅': 'check', '✓': 'check',
+            '⬜': 'close', '🟨': 'star', '🟪': 'star',
+            '✕': 'close', '☰': 'columns'
+        };
+
         function addMenuItem(menu, label, fn) {
             const d = document.createElement('div');
             d.className = 'context-menu-item';
-            d.textContent = label;
+
+            const text = String(label == null ? '' : label);
+            let iconName = null;
+            let rest = text;
+            for (const glyph of Object.keys(MENU_ICONS)) {
+                if (text.startsWith(glyph)) {
+                    iconName = MENU_ICONS[glyph];
+                    rest = text.slice(glyph.length).trimStart();
+                    break;
+                }
+            }
+
+            if (iconName) {
+                const ic = document.createElement('span');
+                ic.className = 'qi qi-' + iconName;
+                d.appendChild(ic);
+            }
+            const span = document.createElement('span');
+            span.textContent = rest;
+            d.appendChild(span);
+
             d.onclick = () => { menu.style.display = 'none'; fn(); };
             menu.appendChild(d);
         }
