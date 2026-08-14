@@ -43,14 +43,10 @@
     "onLanguage:oql",
     "onLanguage:mcpql",
     "onView:querystudio.clusters",
-    "onCommand:queryStudio.newKqlFile",
-    "onCommand:queryStudio.newWiqlFile",
-    "onCommand:queryStudio.newOqlFile",
-    "onCommand:queryStudio.newMcpqlFile",
     "onUri",
     "onChatParticipant:quest.chat"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -1036,7 +1032,10 @@
                 "description": "Custom instructions for this persona"
               }
             },
-            "required": ["name", "prompt"]
+            "required": [
+              "name",
+              "prompt"
+            ]
           }
         },
         "queryStudio.ai.defaultPersona": {
@@ -1189,10 +1188,12 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
+    "vscode:prepublish": "npm run check-types && node esbuild.js --production",
+    "compile": "npm run check-types && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc --noEmit -p ./",
+    "compile-tests": "tsc -p ./",
+    "pretest": "npm run compile-tests",
     "test": "node ./out/test/runTest.js",
     "lint": "eslint src --ext ts",
     "package": "vsce package"
@@ -1207,6 +1208,7 @@
     "@typescript-eslint/parser": "^6.13.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.28.1",
     "eslint": "^8.54.0",
     "mocha": "^11.7.5",
     "sharp": "^0.34.5",

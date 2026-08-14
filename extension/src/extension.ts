@@ -35,7 +35,6 @@ let queryCounter = 0;
 const modeLangMap: Record<string, 'kql' | 'wiql' | 'oql' | 'mcpql'> = { kusto: 'kql', ado: 'wiql', outlook: 'oql', mcp: 'mcpql' };
 /** Map mode → file extension */
 const modeExtMap: Record<string, string> = { kusto: '.kql', ado: '.wiql', outlook: '.oql', mcp: '.mcpql' };
-let resultsProviderInstance: ResultsWebViewProvider;
 
 // Log buffer for feedback attachment (populated via intercepted outputChannel.appendLine)
 const _logBuffer: string[] = [];
@@ -134,7 +133,6 @@ export async function activate(context: vscode.ExtensionContext) {
     const snippetsProvider = new SnippetsWebViewProvider(context.extensionUri, context);
     const aiChatProvider = new AIChatViewProvider(context.extensionUri, sidecar.client, outputChannel, context);
     const resultsProvider = new ResultsWebViewProvider(context.extensionUri, context);
-    resultsProviderInstance = resultsProvider;
 
     // Register all view providers synchronously (fast, no I/O)
     const clustersTreeView = vscode.window.createTreeView('querystudio.clusters', {
@@ -256,7 +254,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 // Add cluster().database() prefix to the current query
                 const editor = findQueryEditor();
                 if (editor) {
-                    const currentText = editor.document.getText();
                     const prefix = `cluster('${clusterUrl}').database('${database}')\n`;
                     await editor.edit(editBuilder => {
                         editBuilder.insert(new vscode.Position(0, 0), prefix);
@@ -449,7 +446,6 @@ export async function activate(context: vscode.ExtensionContext) {
         { dispose: () => mcpConfigLoader.dispose() },
         { dispose: () => mcpToolDiscovery.dispose() }
     );
-    mcpConfigLoader.initialize();
 
     // Wire MCP discovery into cluster tree provider and query commands
     clusterProvider.setMcpDiscovery(
@@ -477,8 +473,23 @@ export async function activate(context: vscode.ExtensionContext) {
         (serverName: string) => mcpToolDiscovery.getToolsForServer(serverName)
     );
 
+    // MCP work is only worth doing when the user actually has MCP servers configured,
+    // or is explicitly working in MCP mode. Otherwise every session would pay for
+    // tool discovery and a periodic retry timer for nothing.
+    const isMcpRelevant = () =>
+        mcpToolDiscovery.getConfiguredServerNames().length > 0 || currentMode === 'mcp';
+
+    let mcpDiscoveryStarted = false;
+
     // When MCP config or tools change, push schema to sidecar
     const pushMcpSchema = async () => {
+        if (!isMcpRelevant()) {
+            return;
+        }
+        if (!mcpDiscoveryStarted) {
+            mcpDiscoveryStarted = true;
+            mcpToolDiscovery.startPeriodicDiscovery();
+        }
         try {
             await mcpToolDiscovery.discoverTools();
             const payload = mcpToolDiscovery.toSchemaPayload();
@@ -509,9 +520,9 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     // Clear any stale MCP schema from previous sessions before fresh discovery
     sidecar.client.clearMcpSchema().catch(() => {});
-    // Initial discovery (non-blocking) + start periodic retries for late-starting MCP servers
-    pushMcpSchema().catch(() => {});
-    mcpToolDiscovery.startPeriodicDiscovery();
+    // Load MCP config, then discover only if MCP is relevant. initialize() fires
+    // onConfigChanged, which drives pushMcpSchema (and starts periodic discovery).
+    mcpConfigLoader.initialize().catch(() => {});
 
     // Register manual MCP tools refresh command
     context.subscriptions.push(
@@ -774,6 +785,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const newMode = selected.mode;
             setCurrentMode(newMode);
             updateModeStatusBar(newMode);
+            if (newMode === 'mcp') { pushMcpSchema().catch(() => {}); }
 
             // Reset active connection and set new query type
             resetActiveConnection();
@@ -828,6 +840,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             setCurrentMode(mode);
             updateModeStatusBar(mode);
+            if (mode === 'mcp') { pushMcpSchema().catch(() => {}); }
 
             // Reset active connection and set new query type
             resetActiveConnection();
@@ -1429,11 +1442,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Refresh views
     clusterProvider.refresh();
-
-    // Focus the Quest sidebar (AI Chat is part of it)
-    setTimeout(() => {
-        vscode.commands.executeCommand('workbench.view.extension.queryStudio');
-    }, 500);
 
     // Handle sidecar startup completion in the background (non-blocking)
     sidecarPromise.then(async () => {

@@ -1,15 +1,18 @@
 .vscode/**
 .vscode-test/**
 src/**
+out/**
+scripts/**
 .gitignore
 .yarnrc
+esbuild.js
 vsc-extension-quickstart.md
 **/tsconfig.json
 **/.eslintrc.json
 **/*.map
 **/*.ts
-!out/**/*.js
 node_modules/**
 
-# Keep the server directory for the bundled sidecar
+# Keep the bundled extension entry point and the sidecar binaries
+!dist/extension.js
 !server/**
