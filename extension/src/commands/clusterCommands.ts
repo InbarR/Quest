@@ -1130,7 +1130,7 @@ async function addDataSourceFromImage(
 
             if (viaLm.result?.success) {
                 progress.report({ message: 'Fetching databases...' });
-                await handleExtractedResult(client, clusterProvider, viaLm.result, mode);
+                await handleExtractedResult(client, clusterProvider, viaLm.result, mode, progress);
                 return;
             }
 
@@ -1163,7 +1163,7 @@ async function addDataSourceFromImage(
                             });
                             if (retry.success) {
                                 progress.report({ message: 'Fetching databases...' });
-                                await handleExtractedResult(client, clusterProvider, retry, mode);
+                                await handleExtractedResult(client, clusterProvider, retry, mode, progress);
                                 return;
                             }
                             vscode.window.showErrorMessage(`Could not extract info: ${retry.error || 'Unknown error'}`);
@@ -1180,7 +1180,7 @@ async function addDataSourceFromImage(
             }
 
             progress.report({ message: 'Fetching databases...' });
-            await handleExtractedResult(client, clusterProvider, extracted, mode);
+            await handleExtractedResult(client, clusterProvider, extracted, mode, progress);
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             vscode.window.showErrorMessage(`Extraction failed: ${msg}`);
@@ -1212,11 +1212,12 @@ async function handleExtractedResult(
     client: SidecarClient,
     clusterProvider: ClusterTreeProvider,
     extracted: ExtractedDataSourceInfo,
-    mode: string
+    mode: string,
+    progress?: vscode.Progress<{ message?: string }>
 ) {
     // Use multi-cluster flow for kusto when clusters array is available
     if (mode === 'kusto' && extracted.clusters && extracted.clusters.length > 0) {
-        await addMultipleClusters(client, clusterProvider, extracted.clusters);
+        await addMultipleClusters(client, clusterProvider, extracted.clusters, progress);
         return;
     }
 
@@ -1227,7 +1228,8 @@ async function handleExtractedResult(
 async function addMultipleClusters(
     client: SidecarClient,
     clusterProvider: ClusterTreeProvider,
-    clusters: ExtractedClusterItem[]
+    clusters: ExtractedClusterItem[],
+    progress?: vscode.Progress<{ message?: string }>
 ) {
     // Build a flat list of cluster/database pairs for QuickPick
     interface ClusterDbItem extends vscode.QuickPickItem {
@@ -1239,7 +1241,12 @@ async function addMultipleClusters(
     const items: ClusterDbItem[] = [];
     for (const cluster of clusters) {
         if (cluster.databases.length === 0) {
-            // No databases extracted — try auto-discovery via .show databases
+            // No databases extracted — try auto-discovery via .show databases.
+            // This is the slow step: it opens a real connection and may prompt for
+            // Azure sign-in, so name the cluster being probed rather than leaving
+            // the notification on a generic message.
+            const clusterLabel = cluster.displayName || cluster.clusterUrl;
+            progress?.report({ message: `Finding databases on ${clusterLabel}...` });
             try {
                 const dbResult = await client.executeQuery({
                     query: '.show databases | project DatabaseName',

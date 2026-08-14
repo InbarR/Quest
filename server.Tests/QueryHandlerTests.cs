@@ -184,6 +184,57 @@ public class QueryHandlerTests : IDisposable
         _mockDataSource.LastQueryRequest!.MaxResults.Should().Be(1000); // Default from MockDataSource.UIConfig
     }
 
+    /// <summary>
+    /// QueryRequest.Timeout is expressed in seconds while DataSourceQueryRequest
+    /// carries milliseconds. The value used to be copied straight across, turning
+    /// a 30 second timeout into 30 milliseconds.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_ConvertsTimeoutFromSecondsToMilliseconds()
+    {
+        await _mockDataSource.ConnectAsync(new DataSourceConnectionParams
+        {
+            Server = "test-server",
+            Database = "test-db"
+        });
+
+        var request = new QueryRequest(
+            Query: "test query",
+            ClusterUrl: "test-server",
+            Database: "test-db",
+            Type: "mock",
+            Timeout: 30,
+            MaxResults: null
+        );
+
+        await _handler.ExecuteAsync(request, CancellationToken.None);
+
+        _mockDataSource.LastQueryRequest!.TimeoutMs.Should().Be(30_000);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithoutTimeout_LeavesTimeoutUnset()
+    {
+        await _mockDataSource.ConnectAsync(new DataSourceConnectionParams
+        {
+            Server = "test-server",
+            Database = "test-db"
+        });
+
+        var request = new QueryRequest(
+            Query: "test query",
+            ClusterUrl: "test-server",
+            Database: "test-db",
+            Type: "mock",
+            Timeout: null,
+            MaxResults: null
+        );
+
+        await _handler.ExecuteAsync(request, CancellationToken.None);
+
+        _mockDataSource.LastQueryRequest!.TimeoutMs.Should().BeNull();
+    }
+
     [Fact]
     public async Task ExecuteAsync_PassesConnectionParamsToDataSource()
     {

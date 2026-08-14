@@ -16,7 +16,9 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Fixed
 
+- **Query timeouts are now enforced.** `TimeoutMs` was documented as milliseconds but assigned a value in seconds, and no data source ever read it — so a query asking for a 30 second limit could block for as long as the underlying client allowed (up to fifteen minutes for Kusto). The timeout is converted correctly and applied centrally, so it covers every data source
 - **"Add from screenshot" now runs through VS Code's own Copilot models.** The sidecar's direct REST endpoint refuses image input on some accounts (internal proxies in particular) even while advertising vision-capable models. Extraction now goes through `vscode.lm`, which reuses the editor's Copilot session, and falls back to the sidecar path when that isn't available
+- Database auto-discovery after a screenshot import names the cluster it is probing, instead of sitting on a generic "Fetching databases..." message while it connects and possibly prompts for sign-in
 - API failures now surface the service's own error text instead of "Response status code does not indicate success". `EnsureSuccessStatusCode` was discarding every response body, so upstream failures were undiagnosable
 - Results columns no longer grow without limit when a row contains a very long value, which made horizontal scrolling nearly unusable ([#2](https://github.com/InbarR/Quest/issues/2)). Columns are capped at 400px by default, configurable via `queryStudio.results.maxColumnWidth` (0 disables the cap); manual resizing still overrides it
 - AI chat panel icon now renders; `resources/ai-light.svg` and `ai-dark.svg` were referenced but had never existed

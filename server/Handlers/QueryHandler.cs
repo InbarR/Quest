@@ -112,17 +112,51 @@ public class QueryHandler : IDisposable
                 ? dataSource.UIConfig.DefaultMaxResults
                 : int.MaxValue;
 
+            // QueryRequest.Timeout is in seconds; DataSourceQueryRequest.TimeoutMs is
+            // milliseconds. The value used to be copied across unconverted, so a
+            // 30 second request was recorded as 30 milliseconds.
+            var timeoutMs = request.Timeout is > 0 ? request.Timeout.Value * 1000 : (int?)null;
+
             var dsRequest = new DataSourceQueryRequest
             {
                 Query = request.Query,
                 ClusterUrl = request.ClusterUrl,
                 Database = request.Database,
                 MaxResults = (request.MaxResults is null or 0) ? defaultMaxResults : request.MaxResults.Value,
-                TimeoutMs = request.Timeout
+                TimeoutMs = timeoutMs
             };
 
+            // Enforce the timeout here so it applies to every data source. Nothing
+            // read TimeoutMs previously, so a caller asking for a short timeout could
+            // still block for as long as the underlying client allowed - up to
+            // fifteen minutes for Kusto.
+            using var timeoutCts = timeoutMs.HasValue
+                ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                : null;
+            if (timeoutCts != null)
+            {
+                timeoutCts.CancelAfter(timeoutMs!.Value);
+                ct = timeoutCts.Token;
+            }
+
             // Execute the query
-            var result = await dataSource.ExecuteQueryAsync(dsRequest, ct);
+            QueryResult result;
+            try
+            {
+                result = await dataSource.ExecuteQueryAsync(dsRequest, ct);
+            }
+            catch (OperationCanceledException) when (timeoutCts?.IsCancellationRequested == true && !externalCt.IsCancellationRequested)
+            {
+                sw.Stop();
+                return new QueryResult(
+                    Success: false,
+                    Columns: Array.Empty<string>(),
+                    Rows: Array.Empty<string[]>(),
+                    RowCount: 0,
+                    ExecutionTimeMs: sw.ElapsedMilliseconds,
+                    Error: $"Query timed out after {timeoutMs / 1000} seconds"
+                );
+            }
 
             sw.Stop();
             // Return result with actual execution time
