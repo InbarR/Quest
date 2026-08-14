@@ -148,3 +148,31 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publishing is skipped when VSCE_PAT isn't configured, so tagging still
+      # produces a GitHub Release without failing the run.
+      - name: Check for Marketplace credentials
+        id: marketplace
+        run: |
+          if [ -n "${{ secrets.VSCE_PAT }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VSCE_PAT secret is not set - skipping Marketplace publish."
+          fi
+
+      - name: Setup Node.js
+        if: steps.marketplace.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Publish to Visual Studio Marketplace
+        if: steps.marketplace.outputs.configured == 'true'
+        run: |
+          npm install -g @vscode/vsce
+          # Publish the exact artifact that was built and released, rather than
+          # repackaging, so the Marketplace and the GitHub Release match.
+          vsce publish --packagePath release/*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
