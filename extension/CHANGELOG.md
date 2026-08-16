@@ -2,6 +2,12 @@
 
 All notable changes to the "Quest" extension will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Copy query as rich text** - the Copy button in the results toolbar now places a syntax-highlighted version on the clipboard, so colors survive pasting into Outlook, Teams or Word. Plain text is included alongside it, so pasting into an editor or terminal is unchanged. Configurable via `queryStudio.results.copyRichText` and `queryStudio.results.copyRichTextTheme` (light or dark)
+
 ## [0.8.0] - 2026-08-14
 
 ### Changed

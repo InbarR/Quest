@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { QueryResult } from '../sidecar/SidecarClient';
 import { ICON_STYLES } from './webviewIcons';
+import { COPY_SCRIPT } from './webviewCopy';
 
 interface ColorRule {
     columnIndex: number;
@@ -203,8 +204,27 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                     const queryWithPrefix = activeTab.clusterUrl && activeTab.database
                         ? `cluster('${clusterForKql}').database('${activeTab.database}').\n${activeTab.query}`
                         : activeTab.query;
-                    vscode.env.clipboard.writeText(queryWithPrefix);
+
+                    const copyConfig = vscode.workspace.getConfiguration('queryStudio');
+                    const useRichText = copyConfig.get<boolean>('results.copyRichText', true);
+
+                    // Rich text has to be written from the webview: the extension
+                    // host clipboard API only carries plain text.
+                    if (useRichText && this._view) {
+                        this._view.webview.postMessage({
+                            command: 'copyRichQuery',
+                            text: queryWithPrefix,
+                            language: activeTab.queryType || 'kusto',
+                            theme: copyConfig.get<string>('results.copyRichTextTheme', 'light')
+                        });
+                    } else {
+                        vscode.env.clipboard.writeText(queryWithPrefix);
+                    }
                 }
+                break;
+            case 'copyRichFailed':
+                // The webview could not reach the clipboard; fall back to plain text.
+                vscode.env.clipboard.writeText(message.value);
                 break;
             case 'setQuery':
                 // For Outlook mode, clusterUrl and database can be empty
@@ -2305,6 +2325,13 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         window.addEventListener('message', event => {
             const msg = event.data;
             switch (msg.command) {
+                case 'copyRichQuery': {
+                    const html = questHighlightToHtml(msg.text, msg.language, msg.theme);
+                    if (!questCopyRich(msg.text, html)) {
+                        vscode.postMessage({ command: 'copyRichFailed', value: msg.text });
+                    }
+                    break;
+                }
                 case 'setMaxColumnWidth':
                     document.documentElement.style.setProperty('--quest-max-col-width', msg.value);
                     break;
@@ -2611,6 +2638,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
             });
         }
         function closeTab(id) { vscode.postMessage({ command: 'closeTab', tabId: id }); }
+${COPY_SCRIPT}
         function setQuery() { vscode.postMessage({ command: 'setQuery' }); }
         function copyQuery() { vscode.postMessage({ command: 'copyQuery' }); }
         function openInAdx() { vscode.postMessage({ command: 'openInAdx' }); }

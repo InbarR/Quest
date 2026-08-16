@@ -982,6 +982,24 @@
           "default": true,
           "description": "Open query results in a new tab (true) or replace the current results tab (false)"
         },
+        "queryStudio.results.copyRichText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy queries as syntax-highlighted rich text, so colors are preserved when pasting into Outlook, Teams or Word. Plain text is always included as well, so code editors are unaffected."
+        },
+        "queryStudio.results.copyRichTextTheme": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark"
+          ],
+          "default": "light",
+          "enumDescriptions": [
+            "Dark text on a white background, suited to documents and email",
+            "Light text on a dark background, matching the editor's dark theme"
+          ],
+          "description": "Color scheme used when copying queries as rich text."
+        },
         "queryStudio.results.maxColumnWidth": {
           "type": "number",
           "default": 400,
