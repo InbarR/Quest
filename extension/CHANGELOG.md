@@ -6,6 +6,7 @@ All notable changes to the "Quest" extension will be documented in this file.
 
 ### Added
 
+- **Copy as table** - a new toolbar button (and cell context-menu entry) copies rows as a formatted table for pasting into Outlook, Teams or Word. A dialog chooses which columns to include (pre-selected from the columns currently shown) and whether to copy all rows or just the selected ones. URLs stay clickable, cell colors are preserved, and a tab-separated plain-text version is included so pasting into Excel or an editor still works
 - **Copy query as rich text** - the Copy button in the results toolbar now places a syntax-highlighted version on the clipboard, so colors survive pasting into Outlook, Teams or Word. Plain text is included alongside it, so pasting into an editor or terminal is unchanged. Configurable via `queryStudio.results.copyRichText` and `queryStudio.results.copyRichTextTheme` (light or dark)
 
 ## [0.8.0] - 2026-08-14

@@ -226,6 +226,9 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
                 // The webview could not reach the clipboard; fall back to plain text.
                 vscode.env.clipboard.writeText(message.value);
                 break;
+            case 'notify':
+                vscode.window.setStatusBarMessage(`$(check) ${message.value}`, 3000);
+                break;
             case 'setQuery':
                 // For Outlook mode, clusterUrl and database can be empty
                 if (activeTab?.query && this._onSetQuery) {
@@ -1131,12 +1134,86 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         .resize-handle:hover, .resize-handle.resizing {
             background: var(--vscode-focusBorder);
         }
+        .copy-table-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 3000;
+            align-items: center;
+            justify-content: center;
+        }
+        .copy-table-backdrop.visible { display: flex; }
+        .copy-table-dialog {
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+            border-radius: 8px;
+            padding: 16px 18px;
+            width: 380px;
+            max-width: 92vw;
+            max-height: 84vh;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .copy-table-dialog h3 { margin: 0; font-size: 13px; font-weight: 600; }
+        .copy-table-section { display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+        .copy-table-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--vscode-descriptionForeground);
+        }
+        .copy-table-colhead { display: flex; align-items: center; justify-content: space-between; }
+        .copy-table-link {
+            background: none;
+            border: none;
+            color: var(--vscode-textLink-foreground);
+            cursor: pointer;
+            font-size: 11px;
+            padding: 0 4px;
+        }
+        .copy-table-link:hover { text-decoration: underline; }
+        .copy-table-scope { display: flex; flex-direction: column; gap: 3px; }
+        .copy-table-columns {
+            overflow-y: auto;
+            max-height: 210px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            padding: 5px 7px;
+        }
+        .copy-table-check, .copy-table-scope label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 2px 0;
+        }
+        .copy-table-actions { display: flex; justify-content: flex-end; gap: 8px; }
+        .copy-table-actions button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .copy-table-actions button.primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
         .stats-dialog {
             position: fixed;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--vscode-editor-background);
+            transform: translate(-50%, -50%);            background: var(--vscode-editor-background);
             border: 1px solid var(--vscode-focusBorder);
             border-radius: 6px;
             padding: 16px 20px;
@@ -2163,6 +2240,7 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
         <button id="reRunBtn" onclick="reRun()"><span class="qi qi-rerun"></span>Re-Run</button>
         <div class="separator"></div>
         <button onclick="exportCsv()"><span class="qi qi-save"></span>Save Result</button>
+        <button onclick="showCopyTableDialog()" id="copyTableBtn" title="Copy rows as a table for email or Word"><span class="qi qi-pivot"></span>Copy Table</button>
         <button onclick="toggleChart()" id="chartBtn" title="Toggle chart view"><span class="qi qi-chart"></span>Chart</button>
         <button onclick="togglePivot()" id="pivotBtn" title="Toggle pivot table view"><span class="qi qi-pivot"></span>Pivot</button>
         <button onclick="startCompare()" id="compareBtn" title="Compare two result tabs"><span class="qi qi-compare"></span>Compare</button>
@@ -2193,6 +2271,33 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
     </div>
     <div class="container" id="container">
         <div class="welcome">Run a query to see results<br><small>Press F5 or Shift+Enter in a .kql file</small></div>
+    </div>
+    <div class="copy-table-backdrop" id="copyTableBackdrop" onclick="hideCopyTableDialog(event)">
+        <div class="copy-table-dialog" onclick="event.stopPropagation()">
+            <h3>Copy as table</h3>
+            <div class="copy-table-section">
+                <label class="copy-table-label">Rows</label>
+                <div id="copyTableScope" class="copy-table-scope"></div>
+            </div>
+            <div class="copy-table-section">
+                <div class="copy-table-colhead">
+                    <label class="copy-table-label">Columns</label>
+                    <span>
+                        <button class="copy-table-link" onclick="setAllCopyColumns(true)">All</button>
+                        <button class="copy-table-link" onclick="setAllCopyColumns(false)">None</button>
+                    </span>
+                </div>
+                <div id="copyTableColumns" class="copy-table-columns"></div>
+            </div>
+            <label class="copy-table-check">
+                <input type="checkbox" id="copyTableColors" checked>
+                <span>Keep cell colors</span>
+            </label>
+            <div class="copy-table-actions">
+                <button onclick="hideCopyTableDialog()">Cancel</button>
+                <button class="primary" onclick="doCopyTable()"><span class="qi qi-copy"></span>Copy</button>
+            </div>
+        </div>
     </div>
     <div class="chart-container" id="chartContainer">
         <div class="chart-header">
@@ -2641,6 +2746,92 @@ export class ResultsWebViewProvider implements vscode.WebviewViewProvider {
 ${COPY_SCRIPT}
         function setQuery() { vscode.postMessage({ command: 'setQuery' }); }
         function copyQuery() { vscode.postMessage({ command: 'copyQuery' }); }
+
+        // ---- Copy as table ----
+
+        function showCopyTableDialog() {
+            if (!currentData || !currentData.columns) { return; }
+
+            // Default to the columns currently on screen, in their current order.
+            var colsHtml = '';
+            currentData.columns.forEach(function (name, i) {
+                var checked = hiddenColumns.has(i) ? '' : ' checked';
+                colsHtml += '<label class="copy-table-check"><input type="checkbox" data-col="' + i + '"' + checked + '>' +
+                    '<span>' + escapeHtml(name) + '</span></label>';
+            });
+            document.getElementById('copyTableColumns').innerHTML = colsHtml;
+
+            // Offer selection and filter scopes only when they'd differ from "all".
+            var total = currentData.rows.length;
+            var scope = '<label class="copy-table-check"><input type="radio" name="copyScope" value="all" checked>' +
+                '<span>All rows (' + total + ')</span></label>';
+            if (selectedRows.size > 0) {
+                scope = '<label class="copy-table-check"><input type="radio" name="copyScope" value="selected" checked>' +
+                    '<span>Selected rows (' + selectedRows.size + ')</span></label>' +
+                    '<label class="copy-table-check"><input type="radio" name="copyScope" value="all">' +
+                    '<span>All rows (' + total + ')</span></label>';
+            } else if (currentFilterText && filterMode === 'highlight' && matchingRowIndices.length > 0) {
+                scope += '<label class="copy-table-check"><input type="radio" name="copyScope" value="matching">' +
+                    '<span>Matching rows (' + matchingRowIndices.length + ')</span></label>';
+            }
+            document.getElementById('copyTableScope').innerHTML = scope;
+
+            document.getElementById('copyTableColors').checked = colorRules.length > 0;
+            document.getElementById('copyTableBackdrop').classList.add('visible');
+        }
+
+        function hideCopyTableDialog(event) {
+            if (event && event.target !== event.currentTarget) { return; }
+            document.getElementById('copyTableBackdrop').classList.remove('visible');
+        }
+
+        function setAllCopyColumns(checked) {
+            document.querySelectorAll('#copyTableColumns input[data-col]').forEach(function (cb) {
+                cb.checked = checked;
+            });
+        }
+
+        function doCopyTable() {
+            var columns = [];
+            document.querySelectorAll('#copyTableColumns input[data-col]').forEach(function (cb) {
+                if (cb.checked) {
+                    var idx = parseInt(cb.getAttribute('data-col'), 10);
+                    columns.push({ name: currentData.columns[idx], index: idx });
+                }
+            });
+            if (columns.length === 0) {
+                alert('Select at least one column.');
+                return;
+            }
+
+            var scopeEl = document.querySelector('#copyTableScope input[name="copyScope"]:checked');
+            var scope = scopeEl ? scopeEl.value : 'all';
+            var rows;
+            if (scope === 'selected') {
+                rows = Array.from(selectedRows).sort(function (a, b) { return a - b; })
+                    .map(function (i) { return currentData.rows[i]; });
+            } else if (scope === 'matching') {
+                rows = matchingRowIndices.map(function (i) { return currentData.rows[i]; });
+            } else {
+                rows = currentData.rows;
+            }
+
+            var useColors = document.getElementById('copyTableColors').checked;
+            var built = questBuildTableHtml({
+                columns: columns,
+                rows: rows,
+                theme: 'light',
+                colorFor: useColors ? getColorStyle : null
+            });
+
+            if (!questCopyRich(built.plain, built.html)) {
+                vscode.postMessage({ command: 'copyRichFailed', value: built.plain });
+            } else {
+                vscode.postMessage({ command: 'notify', value: 'Copied ' + rows.length + ' rows as a table' });
+            }
+            hideCopyTableDialog();
+        }
+
         function openInAdx() { vscode.postMessage({ command: 'openInAdx' }); }
         function openInAdo() { vscode.postMessage({ command: 'openInAdo' }); }
         function reRun() { vscode.postMessage({ command: 'reRun' }); }
@@ -3158,6 +3349,7 @@ ${COPY_SCRIPT}
 
             // Copy Cell (most common action - outside submenu)
             addMenuItem(menu, '📋 Copy Cell', () => vscode.postMessage({ command: 'copyCell', value: v }));
+            addMenuItem(menu, '📊 Copy as Table...', () => showCopyTableDialog());
 
             // Other copy options in submenu
             const copySubmenu = addSubmenuItem(menu, '📋 More Copy Options');
@@ -3459,6 +3651,7 @@ ${COPY_SCRIPT}
             if (e.key === 'Escape') {
                 document.getElementById('contextMenu').style.display = 'none';
                 document.getElementById('tabContextMenu').style.display = 'none';
+                hideCopyTableDialog();
             }
             if (e.key === 'F12') {
                 e.preventDefault();

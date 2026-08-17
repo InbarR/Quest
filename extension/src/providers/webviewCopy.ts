@@ -169,14 +169,81 @@ export const COPY_SCRIPT = `
     }
 
     /**
+     * Builds an inline-styled HTML table plus a tab-separated plain-text
+     * equivalent, suitable for pasting into mail, Word or a spreadsheet.
+     *
+     * Options:
+     *   columns   - array of { name, index } to emit, in order
+     *   rows      - array of row arrays (already filtered/ordered by the caller)
+     *   colorFor  - optional (columnIndex, value) => 'background-color:..;color:..;'
+     *   theme     - 'light' or 'dark'
+     */
+    function questBuildTableHtml(options) {
+        var theme = QUEST_COPY_THEMES[options.theme] || QUEST_COPY_THEMES.light;
+        var columns = options.columns || [];
+        var rows = options.rows || [];
+        var colorFor = options.colorFor;
+
+        // Word and Outlook honour the deprecated table attributes far more
+        // reliably than CSS border properties, so set both.
+        var tableStyle = 'border-collapse:collapse;border:1px solid ' + theme.border +
+            ';font-family:Calibri,Arial,sans-serif;font-size:10.5pt;color:' + theme.text + ';';
+        var cellBase = 'border:1px solid ' + theme.border + ';padding:4px 8px;text-align:left;vertical-align:top;';
+        var headStyle = cellBase + 'background-color:' + (options.theme === 'dark' ? '#2d2d2d' : '#f2f2f2') +
+            ';font-weight:bold;';
+
+        var html = '<table cellspacing="0" cellpadding="4" border="1" style="' + tableStyle + '">';
+        html += '<thead><tr>';
+        for (var c = 0; c < columns.length; c++) {
+            html += '<th style="' + headStyle + '">' + questEscapeHtml(columns[c].name) + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+
+        var plainLines = [];
+        plainLines.push(columns.map(function (col) { return col.name; }).join('\\t'));
+
+        for (var r = 0; r < rows.length; r++) {
+            html += '<tr>';
+            var plainCells = [];
+            for (var k = 0; k < columns.length; k++) {
+                var idx = columns[k].index;
+                var raw = rows[r][idx];
+                var value = raw === null || raw === undefined ? '' : String(raw);
+                var style = cellBase;
+
+                if (colorFor) {
+                    var extra = colorFor(idx, value);
+                    if (extra) { style += extra; }
+                }
+
+                var content;
+                if (/^https?:\\/\\//.test(value)) {
+                    // Keep URLs clickable in the pasted output.
+                    content = '<a href="' + questEscapeHtml(value) + '">' + questEscapeHtml(value) + '</a>';
+                } else {
+                    content = questEscapeHtml(value).replace(/\\n/g, '<br>');
+                }
+
+                html += '<td style="' + style + '">' + content + '</td>';
+                // Tabs and newlines would break the plain-text table alignment.
+                plainCells.push(value.replace(/[\\t\\r\\n]+/g, ' '));
+            }
+            html += '</tr>';
+            plainLines.push(plainCells.join('\\t'));
+        }
+
+        html += '</tbody></table>';
+        return { html: html, plain: plainLines.join('\\n') };
+    }
+
+    /**
      * Places both an HTML and a plain-text flavour on the clipboard.
      *
      * A temporary off-screen selection is required because execCommand('copy')
      * only fires a copy event when something is selected. The caller's own
      * selection is restored afterwards.
      */
-    function questCopyRich(plain, html) {
-        var copied = false;
+    function questCopyRich(plain, html) {        var copied = false;
         var handler = function (event) {
             event.clipboardData.setData('text/html', html);
             event.clipboardData.setData('text/plain', plain);
